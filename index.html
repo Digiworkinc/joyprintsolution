@@ -377,13 +377,14 @@
       let store = JSON.parse(localStorage.getItem(key) || '{}');
       store[docId] = data;
       localStorage.setItem(key, JSON.stringify(store));
+      // Update state immediately
+      window.state[colName] = Object.values(store);
     }
 
     function loadFromLocalStorage(colName) {
       const key = `joy-print-${colName}`;
       const store = JSON.parse(localStorage.getItem(key) || '{}');
       window.state[colName] = Object.values(store);
-      window.renderPage();
     }
 
     function loadAllFromLocalStorage() {
@@ -391,6 +392,7 @@
       collections.forEach(colName => {
         loadFromLocalStorage(colName);
       });
+      window.renderPage();
     }
 
     function deleteFromLocalStorage(colName, docId) {
@@ -398,6 +400,8 @@
       let store = JSON.parse(localStorage.getItem(key) || '{}');
       delete store[docId];
       localStorage.setItem(key, JSON.stringify(store));
+      // Update state immediately
+      window.state[colName] = Object.values(store);
     }
 
     // Update Database Status Badge
@@ -443,6 +447,7 @@
       try {
         if (window.useLocalStorage) {
           saveToLocalStorage(colName, docId, data);
+          window.renderPage();
         } else {
           await setDoc(getDocRef(colName, docId), data);
         }
@@ -453,6 +458,7 @@
           updateDBStatus(false, "LocalStorage Mode");
         }
         saveToLocalStorage(colName, docId, data);
+        window.renderPage();
       }
     };
 
@@ -463,6 +469,7 @@
           let store = JSON.parse(localStorage.getItem(key) || '{}');
           store[docId] = { ...store[docId], ...data };
           localStorage.setItem(key, JSON.stringify(store));
+          window.state[colName] = Object.values(store);
           window.renderPage();
         } else {
           await updateDoc(getDocRef(colName, docId), data);
@@ -477,6 +484,7 @@
         let store = JSON.parse(localStorage.getItem(key) || '{}');
         store[docId] = { ...store[docId], ...data };
         localStorage.setItem(key, JSON.stringify(store));
+        window.state[colName] = Object.values(store);
         window.renderPage();
       }
     };
@@ -485,6 +493,7 @@
       try {
         if (window.useLocalStorage) {
           deleteFromLocalStorage(colName, docId);
+          window.renderPage();
         } else {
           await deleteDoc(getDocRef(colName, docId));
         }
@@ -495,6 +504,7 @@
           updateDBStatus(false, "LocalStorage Mode");
         }
         deleteFromLocalStorage(colName, docId);
+        window.renderPage();
       }
     };
 
