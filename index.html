@@ -101,10 +101,10 @@
         </div>
 
         <!-- Connection Status Banner -->
-        <div class="px-4 py-1.5 mx-3 mb-2 rounded text-[11px] font-medium flex items-center justify-between bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" id="db-status">
+        <div class="px-4 py-1.5 mx-3 mb-2 rounded text-[11px] font-medium flex items-center justify-between" id="db-status">
           <span class="flex items-center space-x-1">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Firebase Connected</span>
+            <span class="w-2 h-2 rounded-full animate-pulse" id="db-status-dot"></span>
+            <span id="db-status-text">Connecting...</span>
           </span>
           <i data-lucide="database" class="w-3.5 h-3.5"></i>
         </div>
@@ -294,11 +294,17 @@
     // Initialize Firebase Realtime Sync
     async function initFirebaseSync() {
       try {
+        console.log("🔄 Attempting Firebase authentication...");
+        
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
         } else {
           await signInAnonymously(auth);
         }
+
+        console.log("✅ Firebase authenticated successfully");
+        updateDBStatus(true, "Firebase Connected");
+        window.useLocalStorage = false;
 
         const collections = ['pelanggan', 'stok', 'servis', 'penjualan', 'pembelian', 'kas', 'operasional', 'hutangpiutang'];
         
@@ -320,19 +326,32 @@
               window.renderPage();
             }
           }, (err) => {
-            console.error(`Error loading ${colName}:`, err);
+            console.error(`Error loading ${colName} from Firebase:`, err);
             if (!window.useLocalStorage) {
+              console.log(`⚠️ Switching to LocalStorage for ${colName}`);
               window.useLocalStorage = true;
+              updateDBStatus(false, "LocalStorage Mode");
               loadFromLocalStorage(colName);
             }
           });
         });
 
       } catch (err) {
-        console.error("Firebase auth error:", err);
-        console.warn("Switching to LocalStorage as fallback...");
+        console.error("❌ Firebase auth error:", err);
+        console.warn("⚠️ Switching to LocalStorage as fallback...");
         window.useLocalStorage = true;
-        loadAllFromLocalStorage();
+        updateDBStatus(false, "LocalStorage Mode");
+        
+        // Load seed data into localStorage and render
+        const collections = ['pelanggan', 'stok', 'servis', 'penjualan', 'pembelian', 'kas', 'operasional', 'hutangpiutang'];
+        collections.forEach(colName => {
+          if (initialSeedData[colName]) {
+            initialSeedData[colName].forEach(item => {
+              saveToLocalStorage(colName, item.id, item);
+            });
+          }
+          loadFromLocalStorage(colName);
+        });
       }
     }
 
@@ -365,19 +384,39 @@
       localStorage.setItem(key, JSON.stringify(store));
     }
 
+    // Update Database Status Badge
+    function updateDBStatus(isFirebase, message) {
+      const statusBadge = document.getElementById('db-status');
+      const statusDot = document.getElementById('db-status-dot');
+      const statusText = document.getElementById('db-status-text');
+
+      if (isFirebase) {
+        statusBadge.className = 'px-4 py-1.5 mx-3 mb-2 rounded text-[11px] font-medium flex items-center justify-between bg-emerald-500/10 text-emerald-500 border border-emerald-500/20';
+        statusDot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+      } else {
+        statusBadge.className = 'px-4 py-1.5 mx-3 mb-2 rounded text-[11px] font-medium flex items-center justify-between bg-amber-500/10 text-amber-500 border border-amber-500/20';
+        statusDot.className = 'w-2 h-2 rounded-full bg-amber-500 animate-pulse';
+      }
+      statusText.textContent = message;
+    }
+
     // Database Sync Helper Functions for CRUD Operations
     window.dbSave = async function(colName, docId, data) {
       try {
         if (window.useLocalStorage) {
+          console.log(`💾 Saving ${docId} to LocalStorage (${colName})`);
           saveToLocalStorage(colName, docId, data);
         } else {
+          console.log(`📤 Saving ${docId} to Firebase (${colName})`);
           await setDoc(getDocRef(colName, docId), data);
         }
       } catch (err) {
         console.error(`Error saving to ${colName}:`, err);
         // Fallback to LocalStorage if Firebase fails
         if (!window.useLocalStorage) {
+          console.log(`⚠️ Firebase save failed, switching to LocalStorage`);
           window.useLocalStorage = true;
+          updateDBStatus(false, "LocalStorage Mode");
           saveToLocalStorage(colName, docId, data);
         }
       }
@@ -386,21 +425,27 @@
     window.dbUpdate = async function(colName, docId, data) {
       try {
         if (window.useLocalStorage) {
+          console.log(`✏️ Updating ${docId} in LocalStorage (${colName})`);
           const key = `joy-print-${colName}`;
           let store = JSON.parse(localStorage.getItem(key) || '{}');
           store[docId] = { ...store[docId], ...data };
           localStorage.setItem(key, JSON.stringify(store));
+          window.renderPage();
         } else {
+          console.log(`📤 Updating ${docId} in Firebase (${colName})`);
           await updateDoc(getDocRef(colName, docId), data);
         }
       } catch (err) {
         console.error(`Error updating ${colName}:`, err);
         if (!window.useLocalStorage) {
+          console.log(`⚠️ Firebase update failed, switching to LocalStorage`);
           window.useLocalStorage = true;
+          updateDBStatus(false, "LocalStorage Mode");
           const key = `joy-print-${colName}`;
           let store = JSON.parse(localStorage.getItem(key) || '{}');
           store[docId] = { ...store[docId], ...data };
           localStorage.setItem(key, JSON.stringify(store));
+          window.renderPage();
         }
       }
     };
@@ -408,14 +453,18 @@
     window.dbDelete = async function(colName, docId) {
       try {
         if (window.useLocalStorage) {
+          console.log(`🗑️ Deleting ${docId} from LocalStorage (${colName})`);
           deleteFromLocalStorage(colName, docId);
         } else {
+          console.log(`📤 Deleting ${docId} from Firebase (${colName})`);
           await deleteDoc(getDocRef(colName, docId));
         }
       } catch (err) {
         console.error(`Error deleting from ${colName}:`, err);
         if (!window.useLocalStorage) {
+          console.log(`⚠️ Firebase delete failed, switching to LocalStorage`);
           window.useLocalStorage = true;
+          updateDBStatus(false, "LocalStorage Mode");
           deleteFromLocalStorage(colName, docId);
         }
       }
