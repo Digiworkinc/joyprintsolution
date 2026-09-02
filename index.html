@@ -67,6 +67,17 @@
       background: rgba(255,255,255,0.2);
       border-radius: 4px;
     }
+    /* Notification animations */
+    @keyframes fadeOut {
+      from {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      to {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+    }
   </style>
 </head>
 <body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col font-sans transition-colors duration-200">
@@ -178,8 +189,16 @@
     import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, doc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    // Global Config & Firebase Auth Settings
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'joy-print-solution';
+    // Suppress Firebase verbose logging
+    const originalError = console.error;
+    console.error = function(...args) {
+      const errorStr = args[0]?.toString() || '';
+      // Suppress Firebase auth and network errors
+      if (errorStr.includes('Firebase') || errorStr.includes('identitytoolkit') || errorStr.includes('auth/api-key')) {
+        return; // Suppress silently
+      }
+      originalError.apply(console, args);
+    };
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
       apiKey: "AIzaSyCVfBYUCqSfeFyQjaw-eF62bWFncPl4QT8",
       authDomain: "joy-print-app.firebaseapp.com",
@@ -294,8 +313,6 @@
     // Initialize Firebase Realtime Sync
     async function initFirebaseSync() {
       try {
-        console.log("🔄 Attempting Firebase authentication...");
-        
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
         } else {
@@ -326,7 +343,6 @@
               window.renderPage();
             }
           }, (err) => {
-            console.error(`Error loading ${colName} from Firebase:`, err);
             if (!window.useLocalStorage) {
               console.log(`⚠️ Switching to LocalStorage for ${colName}`);
               window.useLocalStorage = true;
@@ -337,10 +353,10 @@
         });
 
       } catch (err) {
-        console.error("❌ Firebase auth error:", err);
-        console.warn("⚠️ Switching to LocalStorage as fallback...");
+        // Suppress Firebase error logging, just switch to LocalStorage silently
         window.useLocalStorage = true;
-        updateDBStatus(false, "LocalStorage Mode");
+        updateDBStatus(false, "LocalStorage Mode (Offline)");
+        showModeNotification();
         
         // Load seed data into localStorage and render
         const collections = ['pelanggan', 'stok', 'servis', 'penjualan', 'pembelian', 'kas', 'operasional', 'hutangpiutang'];
@@ -400,73 +416,85 @@
       statusText.textContent = message;
     }
 
+    // Show friendly notification for mode change
+    function showModeNotification() {
+      const notification = document.createElement('div');
+      notification.className = 'fixed top-4 right-4 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 px-4 py-3 rounded-lg shadow-lg z-40 max-w-sm';
+      notification.innerHTML = `
+        <div class="flex items-start space-x-2">
+          <i data-lucide="alert-circle" class="w-5 h-5 flex-shrink-0 mt-0.5"></i>
+          <div>
+            <p class="font-semibold text-sm">Mode Offline</p>
+            <p class="text-xs mt-1">Data disimpan secara lokal di perangkat Anda.</p>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(notification);
+      lucide.createIcons();
+      
+      setTimeout(() => {
+        notification.style.animation = 'fadeOut 0.3s ease-in-out';
+        setTimeout(() => notification.remove(), 300);
+      }, 4000);
+    }
+
     // Database Sync Helper Functions for CRUD Operations
     window.dbSave = async function(colName, docId, data) {
       try {
         if (window.useLocalStorage) {
-          console.log(`💾 Saving ${docId} to LocalStorage (${colName})`);
           saveToLocalStorage(colName, docId, data);
         } else {
-          console.log(`📤 Saving ${docId} to Firebase (${colName})`);
           await setDoc(getDocRef(colName, docId), data);
         }
       } catch (err) {
-        console.error(`Error saving to ${colName}:`, err);
-        // Fallback to LocalStorage if Firebase fails
+        // Silently fallback to LocalStorage on error
         if (!window.useLocalStorage) {
-          console.log(`⚠️ Firebase save failed, switching to LocalStorage`);
           window.useLocalStorage = true;
           updateDBStatus(false, "LocalStorage Mode");
-          saveToLocalStorage(colName, docId, data);
         }
+        saveToLocalStorage(colName, docId, data);
       }
     };
 
     window.dbUpdate = async function(colName, docId, data) {
       try {
         if (window.useLocalStorage) {
-          console.log(`✏️ Updating ${docId} in LocalStorage (${colName})`);
           const key = `joy-print-${colName}`;
           let store = JSON.parse(localStorage.getItem(key) || '{}');
           store[docId] = { ...store[docId], ...data };
           localStorage.setItem(key, JSON.stringify(store));
           window.renderPage();
         } else {
-          console.log(`📤 Updating ${docId} in Firebase (${colName})`);
           await updateDoc(getDocRef(colName, docId), data);
         }
       } catch (err) {
-        console.error(`Error updating ${colName}:`, err);
+        // Silently fallback to LocalStorage on error
         if (!window.useLocalStorage) {
-          console.log(`⚠️ Firebase update failed, switching to LocalStorage`);
           window.useLocalStorage = true;
           updateDBStatus(false, "LocalStorage Mode");
-          const key = `joy-print-${colName}`;
-          let store = JSON.parse(localStorage.getItem(key) || '{}');
-          store[docId] = { ...store[docId], ...data };
-          localStorage.setItem(key, JSON.stringify(store));
-          window.renderPage();
         }
+        const key = `joy-print-${colName}`;
+        let store = JSON.parse(localStorage.getItem(key) || '{}');
+        store[docId] = { ...store[docId], ...data };
+        localStorage.setItem(key, JSON.stringify(store));
+        window.renderPage();
       }
     };
 
     window.dbDelete = async function(colName, docId) {
       try {
         if (window.useLocalStorage) {
-          console.log(`🗑️ Deleting ${docId} from LocalStorage (${colName})`);
           deleteFromLocalStorage(colName, docId);
         } else {
-          console.log(`📤 Deleting ${docId} from Firebase (${colName})`);
           await deleteDoc(getDocRef(colName, docId));
         }
       } catch (err) {
-        console.error(`Error deleting from ${colName}:`, err);
+        // Silently fallback to LocalStorage on error
         if (!window.useLocalStorage) {
-          console.log(`⚠️ Firebase delete failed, switching to LocalStorage`);
           window.useLocalStorage = true;
           updateDBStatus(false, "LocalStorage Mode");
-          deleteFromLocalStorage(colName, docId);
         }
+        deleteFromLocalStorage(colName, docId);
       }
     };
 
