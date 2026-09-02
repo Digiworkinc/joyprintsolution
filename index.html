@@ -190,6 +190,9 @@
       measurementId: "G-DX2ZQYXZ01"
     };
 
+    // Flag untuk menggunakan LocalStorage sebagai fallback jika Firebase gagal
+    window.useLocalStorage = false;
+
     const firebaseApp = initializeApp(firebaseConfig);
     const auth = getAuth(firebaseApp);
     const db = getFirestore(firebaseApp);
@@ -318,36 +321,103 @@
             }
           }, (err) => {
             console.error(`Error loading ${colName}:`, err);
+            if (!window.useLocalStorage) {
+              window.useLocalStorage = true;
+              loadFromLocalStorage(colName);
+            }
           });
         });
 
       } catch (err) {
         console.error("Firebase auth error:", err);
+        console.warn("Switching to LocalStorage as fallback...");
+        window.useLocalStorage = true;
+        loadAllFromLocalStorage();
       }
+    }
+
+    // LocalStorage Fallback Functions
+    function saveToLocalStorage(colName, docId, data) {
+      const key = `joy-print-${colName}`;
+      let store = JSON.parse(localStorage.getItem(key) || '{}');
+      store[docId] = data;
+      localStorage.setItem(key, JSON.stringify(store));
+    }
+
+    function loadFromLocalStorage(colName) {
+      const key = `joy-print-${colName}`;
+      const store = JSON.parse(localStorage.getItem(key) || '{}');
+      window.state[colName] = Object.values(store);
+      window.renderPage();
+    }
+
+    function loadAllFromLocalStorage() {
+      const collections = ['pelanggan', 'stok', 'servis', 'penjualan', 'pembelian', 'kas', 'operasional', 'hutangpiutang'];
+      collections.forEach(colName => {
+        loadFromLocalStorage(colName);
+      });
+    }
+
+    function deleteFromLocalStorage(colName, docId) {
+      const key = `joy-print-${colName}`;
+      let store = JSON.parse(localStorage.getItem(key) || '{}');
+      delete store[docId];
+      localStorage.setItem(key, JSON.stringify(store));
     }
 
     // Database Sync Helper Functions for CRUD Operations
     window.dbSave = async function(colName, docId, data) {
       try {
-        await setDoc(getDocRef(colName, docId), data);
+        if (window.useLocalStorage) {
+          saveToLocalStorage(colName, docId, data);
+        } else {
+          await setDoc(getDocRef(colName, docId), data);
+        }
       } catch (err) {
         console.error(`Error saving to ${colName}:`, err);
+        // Fallback to LocalStorage if Firebase fails
+        if (!window.useLocalStorage) {
+          window.useLocalStorage = true;
+          saveToLocalStorage(colName, docId, data);
+        }
       }
     };
 
     window.dbUpdate = async function(colName, docId, data) {
       try {
-        await updateDoc(getDocRef(colName, docId), data);
+        if (window.useLocalStorage) {
+          const key = `joy-print-${colName}`;
+          let store = JSON.parse(localStorage.getItem(key) || '{}');
+          store[docId] = { ...store[docId], ...data };
+          localStorage.setItem(key, JSON.stringify(store));
+        } else {
+          await updateDoc(getDocRef(colName, docId), data);
+        }
       } catch (err) {
         console.error(`Error updating ${colName}:`, err);
+        if (!window.useLocalStorage) {
+          window.useLocalStorage = true;
+          const key = `joy-print-${colName}`;
+          let store = JSON.parse(localStorage.getItem(key) || '{}');
+          store[docId] = { ...store[docId], ...data };
+          localStorage.setItem(key, JSON.stringify(store));
+        }
       }
     };
 
     window.dbDelete = async function(colName, docId) {
       try {
-        await deleteDoc(getDocRef(colName, docId));
+        if (window.useLocalStorage) {
+          deleteFromLocalStorage(colName, docId);
+        } else {
+          await deleteDoc(getDocRef(colName, docId));
+        }
       } catch (err) {
         console.error(`Error deleting from ${colName}:`, err);
+        if (!window.useLocalStorage) {
+          window.useLocalStorage = true;
+          deleteFromLocalStorage(colName, docId);
+        }
       }
     };
 
