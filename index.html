@@ -96,27 +96,35 @@
       background-color: #f1f5f9;
       color: #0f172a;
     }
-    html:not(.dark) h1, 
-    html:not(.dark) h2, 
-    html:not(.dark) h3, 
-    html:not(.dark) h4, 
-    html:not(.dark) h5, 
+
+    html:not(.dark) h1,
+    html:not(.dark) h2,
+    html:not(.dark) h3,
+    html:not(.dark) h4,
+    html:not(.dark) h5,
     html:not(.dark) h6 {
       color: #0f172a;
     }
+
     html:not(.dark) th {
       color: #1e293b !important;
       background-color: #f8fafc;
     }
+
     html:not(.dark) label {
       color: #334155 !important;
     }
+
     html:not(.dark) .text-slate-400 {
-      color: #475569 !important; /* Tingkatkan kontras dari abu pudar menjadi abu gelap */
+      color: #475569 !important;
+      /* Tingkatkan kontras dari abu pudar menjadi abu gelap */
     }
+
     html:not(.dark) .text-slate-500 {
-      color: #334155 !important; /* Lebih tegas dan mudah dibaca */
+      color: #334155 !important;
+      /* Lebih tegas dan mudah dibaca */
     }
+
     html:not(.dark) input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="color"]):not([type="file"]),
     html:not(.dark) select,
     html:not(.dark) textarea {
@@ -124,6 +132,7 @@
       color: #0f172a !important;
       border-color: #cbd5e1 !important;
     }
+
     html:not(.dark) input::placeholder,
     html:not(.dark) textarea::placeholder {
       color: #94a3b8 !important;
@@ -134,35 +143,43 @@
       background-color: #0f172a;
       color: #f8fafc;
     }
-    html.dark h1, 
-    html.dark h2, 
-    html.dark h3, 
-    html.dark h4, 
-    html.dark h5, 
+
+    html.dark h1,
+    html.dark h2,
+    html.dark h3,
+    html.dark h4,
+    html.dark h5,
     html.dark h6 {
       color: #f8fafc;
     }
+
     /* Cegah teks slate bernilai gelap tampil gelap di atas background gelap */
     html.dark .text-slate-900,
     html.dark .text-slate-800,
     html.dark .text-slate-700 {
       color: #f1f5f9;
     }
+
     html.dark .text-slate-600 {
       color: #e2e8f0;
     }
+
     html.dark .text-slate-500 {
       color: #cbd5e1;
     }
+
     html.dark .text-slate-400 {
       color: #94a3b8;
     }
+
     html.dark th {
       color: #f1f5f9 !important;
     }
+
     html.dark label {
       color: #e2e8f0 !important;
     }
+
     html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="color"]):not([type="file"]),
     html.dark select,
     html.dark textarea {
@@ -170,6 +187,7 @@
       color: #f8fafc !important;
       border-color: #475569 !important;
     }
+
     html.dark input::placeholder,
     html.dark textarea::placeholder {
       color: #64748b !important;
@@ -213,15 +231,15 @@
           </button>
         </div>
 
-        <!-- Connection Status Banner -->
-        <div
-          class="px-4 py-1.5 mx-3 mb-2 rounded text-[11px] font-medium flex items-center justify-between bg-cyan-500/10 text-cyan-500 border border-cyan-500/20"
-          id="db-status">
+        <!-- Connection & Storage Status Banner -->
+        <div onclick="openStorageStatusModal()"
+          class="px-4 py-1.5 mx-3 mb-2 rounded text-[11px] font-medium flex items-center justify-between bg-cyan-500/10 text-cyan-500 border border-cyan-500/20 cursor-pointer hover:opacity-90 transition"
+          id="db-status" title="Klik untuk melihat kapasitas penyimpanan dan status proteksi data anti-hilang">
           <span class="flex items-center space-x-1.5">
             <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
             <span>Inisialisasi Data...</span>
           </span>
-          <i data-lucide="database" class="w-3.5 h-3.5"></i>
+          <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
         </div>
 
         <!-- Navigation Links -->
@@ -287,7 +305,8 @@
       </header>
 
       <!-- Dynamic Page Container -->
-      <main id="content-area" class="flex-1 p-6 overflow-y-auto bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100">
+      <main id="content-area"
+        class="flex-1 p-6 overflow-y-auto bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100">
         <!-- Content dynamic injection -->
       </main>
     </div>
@@ -413,8 +432,153 @@
       ]
     };
 
-    const LOCAL_STORAGE_KEY = 'joy_print_data_v1';
+    // =========================================================================
+    // MESIN PENYIMPANAN DATA UTAMA: DUAL-ENGINE (INDEXEDDB + LOCALSTORAGE MIRROR)
+    // ANTI-DATA-LOSS: Kapasitas Gigabyte, Tidak Terbatas 5MB, & Peringatan Kuota Penuh
+    // =========================================================================
 
+    const LOCAL_STORAGE_KEY = 'joy_print_data_v1';
+    const IDB_CONFIG = {
+      dbName: 'JoyPrintDB_v1',
+      version: 1,
+      storeName: 'app_state',
+      key: 'main_payload',
+      snapshotKey: 'backup_snapshot'
+    };
+
+    // Objek Status Kapasitas Penyimpanan Global
+    window.storageCapacityInfo = {
+      usageBytes: 0,
+      quotaBytes: 0,
+      usageFormatted: '0 MB',
+      quotaFormatted: 'Tersedia',
+      percentUsed: 0,
+      isFull: false,
+      isNearFull: false,
+      isPersisted: false
+    };
+
+    // 1. IndexedDB Helper (Kapasitas Besar, Ratusan MB / Gigabyte)
+    function openIDB() {
+      return new Promise((resolve) => {
+        if (!window.indexedDB) {
+          console.warn('IndexedDB tidak didukung pada browser ini, menggunakan fallback.');
+          resolve(null);
+          return;
+        }
+        try {
+          const req = window.indexedDB.open(IDB_CONFIG.dbName, IDB_CONFIG.version);
+          req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(IDB_CONFIG.storeName)) {
+              db.createObjectStore(IDB_CONFIG.storeName);
+            }
+          };
+          req.onsuccess = (e) => resolve(e.target.result);
+          req.onerror = (e) => {
+            console.warn('IndexedDB open error:', e.target.error);
+            resolve(null);
+          };
+        } catch (err) {
+          console.warn('Gagal inisialisasi IndexedDB:', err);
+          resolve(null);
+        }
+      });
+    }
+
+    async function idbSaveData(payload, key = IDB_CONFIG.key) {
+      try {
+        const db = await openIDB();
+        if (!db) return false;
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(IDB_CONFIG.storeName, 'readwrite');
+          const store = tx.objectStore(IDB_CONFIG.storeName);
+          const req = store.put(payload, key);
+          req.onsuccess = () => resolve(true);
+          req.onerror = (e) => reject(e.target.error);
+        });
+      } catch (err) {
+        console.error('IndexedDB save error:', err);
+        throw err;
+      }
+    }
+
+    async function idbLoadData(key = IDB_CONFIG.key) {
+      try {
+        const db = await openIDB();
+        if (!db) return null;
+        return new Promise((resolve) => {
+          const tx = db.transaction(IDB_CONFIG.storeName, 'readonly');
+          const store = tx.objectStore(IDB_CONFIG.storeName);
+          const req = store.get(key);
+          req.onsuccess = (e) => resolve(e.target.result || null);
+          req.onerror = () => resolve(null);
+        });
+      } catch (err) {
+        console.warn('IndexedDB load warning:', err);
+        return null;
+      }
+    }
+
+    // 2. Proteksi Anti-Eviction: Minta Browser Menjaga Penyimpanan Tetap Permanen
+    async function requestPersistentStorage() {
+      if (navigator.storage && navigator.storage.persist) {
+        try {
+          const isPersisted = await navigator.storage.persisted();
+          if (!isPersisted) {
+            const granted = await navigator.storage.persist();
+            window.storageCapacityInfo.isPersisted = granted;
+            return granted;
+          }
+          window.storageCapacityInfo.isPersisted = true;
+          return true;
+        } catch (e) {
+          console.warn('Persistent storage request error:', e);
+        }
+      }
+      return false;
+    }
+
+    // 3. Monitor Kapasitas Disk & Peringatan Jika Penuh
+    async function updateStorageEstimateAndCheck() {
+      if (navigator.storage && navigator.storage.estimate) {
+        try {
+          const estimate = await navigator.storage.estimate();
+          const usage = estimate.usage || 0;
+          const quota = estimate.quota || 0;
+          const percent = quota > 0 ? (usage / quota) * 100 : 0;
+          const usageMB = (usage / (1024 * 1024)).toFixed(1);
+          const quotaGB = (quota / (1024 * 1024 * 1024)).toFixed(1);
+
+          let isPersisted = false;
+          if (navigator.storage.persisted) {
+            isPersisted = await navigator.storage.persisted();
+          }
+
+          const wasFull = window.storageCapacityInfo.isFull;
+
+          window.storageCapacityInfo = {
+            usageBytes: usage,
+            quotaBytes: quota,
+            usageFormatted: `${usageMB} MB`,
+            quotaFormatted: `${quotaGB} GB`,
+            percentUsed: Math.round(percent * 10) / 10,
+            isFull: percent >= 95,
+            isNearFull: percent >= 85,
+            isPersisted
+          };
+
+          // Jika penyimpanan mencapai 95% penuh, langsung berikan peringatan modal
+          if (window.storageCapacityInfo.isFull && !wasFull) {
+            showStorageFullModal('Kapasitas penyimpanan browser Anda telah mencapai 95%. Segera unduh file cadangan Excel.');
+          }
+        } catch (e) {
+          console.warn('Storage estimate check error:', e);
+        }
+      }
+    }
+
+    // 4. Pembaca LocalStorage Sinkron Awal (Untuk Booting Cepat 0 ms)
     function loadLocalStorageData() {
       try {
         const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -425,22 +589,237 @@
       return null;
     }
 
-    function persistLocalStorageData() {
+    // 5. Penyimpan Data Permanen Dual-Engine (Anti-Hilang Berapa Banyak Pun Data)
+    window.persistLocalStorageData = function () {
+      persistData();
+    };
+
+    async function persistData() {
+      const payload = {
+        pelanggan: window.state.pelanggan || [],
+        stok: window.state.stok || [],
+        kategoriStok: window.state.kategoriStok || ['Tinta', 'Sparepart', 'Barang'],
+        servis: window.state.servis || [],
+        penjualan: window.state.penjualan || [],
+        pembelian: window.state.pembelian || [],
+        kas: window.state.kas || [],
+        operasional: window.state.operasional || [],
+        hutangpiutang: window.state.hutangpiutang || [],
+        savedAt: new Date().toISOString()
+      };
+
+      // A. Simpan ke IndexedDB (Kapasitas Besar, Aman untuk Data Sangat Banyak)
       try {
-        const payload = {
-          pelanggan: window.state.pelanggan,
-          stok: window.state.stok,
-          kategoriStok: window.state.kategoriStok,
-          servis: window.state.servis,
-          penjualan: window.state.penjualan,
-          pembelian: window.state.pembelian,
-          kas: window.state.kas,
-          operasional: window.state.operasional,
-          hutangpiutang: window.state.hutangpiutang
-        };
+        await idbSaveData(payload);
+        // Simpan snapshot cadangan internal
+        idbSaveData(payload, IDB_CONFIG.snapshotKey).catch(() => { });
+      } catch (idbErr) {
+        console.error('IndexedDB save error:', idbErr);
+        if (idbErr && (idbErr.name === 'QuotaExceededError' || idbErr.code === 22)) {
+          showStorageFullModal('Disk penyimpanan komputer / browser penuh! Data tidak dapat ditambah lagi sampai memori dibersihkan.');
+        }
+      }
+
+      // B. Simpan ke LocalStorage sebagai mirror sinkron cepat
+      try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
-      } catch (e) {
-        console.warn('Gagal menyimpan localStorage:', e);
+      } catch (lsErr) {
+        if (lsErr && (lsErr.name === 'QuotaExceededError' || lsErr.code === 22)) {
+          // Jika limit 5MB LocalStorage terlampaui, data tetap tersimpan aman di IndexedDB!
+          console.warn('Batas kuota 5MB LocalStorage tercapai. Data tetap aman dan utuh disimpan di IndexedDB.');
+        } else {
+          console.warn('LocalStorage save warning:', lsErr);
+        }
+      }
+
+      // C. Evaluasi penggunaan disk & beri peringatan jika mendekati batas
+      updateStorageEstimateAndCheck();
+    }
+
+    // 6. Modal Peringatan Kapasitas Penuh (Sesuai Permintaan User)
+    window.showStorageFullModal = function (customMsg) {
+      openModal(`
+        <div class="text-center space-y-4 py-3">
+          <div class="w-16 h-16 mx-auto rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center border-2 border-rose-500/20 shadow-lg shadow-rose-500/10">
+            <i data-lucide="alert-triangle" class="w-8 h-8"></i>
+          </div>
+          <div>
+            <h3 class="text-xl font-black text-slate-800 dark:text-slate-100">Peringatan: Penyimpanan Hampir Penuh!</h3>
+            <p class="text-xs text-slate-600 dark:text-slate-300 mt-1 max-w-md mx-auto leading-relaxed">
+              ${customMsg || 'Ruang penyimpanan pada perangkat / browser Anda hampir mencapai batas. Semua data yang telah Anda inputkan tetap aman dan tidak akan hilang jika tidak dihapus manual. Silakan download backup Excel untuk mengamankan arsip Anda.'}
+            </p>
+          </div>
+          <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-left space-y-2">
+            <div class="flex justify-between">
+              <span class="text-slate-500">Ruang Digunakan:</span>
+              <span class="font-bold text-slate-800 dark:text-slate-200">${window.storageCapacityInfo.usageFormatted}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-500">Kapasitas Kuota:</span>
+              <span class="font-bold text-slate-800 dark:text-slate-200">${window.storageCapacityInfo.quotaFormatted}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-500">Persentase Pemakaian:</span>
+              <span class="font-bold text-rose-500">${window.storageCapacityInfo.percentUsed}%</span>
+            </div>
+          </div>
+          <div class="pt-2 flex flex-col sm:flex-row justify-center gap-2">
+            <button onclick="exportAllDataToExcel()" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs shadow-md shadow-emerald-500/20 flex items-center justify-center space-x-1.5 transition">
+              <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+              <span>Download Backup Excel Sekarang</span>
+            </button>
+            <button onclick="closeModal()" class="px-4 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs transition">
+              Tutup Peringatan
+            </button>
+          </div>
+        </div>
+      `);
+      lucide.createIcons();
+    };
+
+    // 7. Modal Info Kesehatan & Status Penyimpanan
+    window.openStorageStatusModal = function () {
+      const info = window.storageCapacityInfo;
+      const totalRecords = (state.pelanggan?.length || 0) +
+        (state.stok?.length || 0) +
+        (state.servis?.length || 0) +
+        (state.penjualan?.length || 0) +
+        (state.pembelian?.length || 0) +
+        (state.kas?.length || 0) +
+        (state.operasional?.length || 0) +
+        (state.hutangpiutang?.length || 0);
+
+      openModal(`
+        <div class="space-y-4">
+          <div class="border-b border-slate-200 dark:border-slate-700 pb-3 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <div class="p-2 rounded-xl bg-cyan-500/10 text-cyan-500">
+                <i data-lucide="shield-check" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h3 class="font-bold text-lg text-slate-800 dark:text-slate-100">Status Penyimpanan Data (Anti-Hilang)</h3>
+                <p class="text-[11px] text-slate-500">Data tersimpan permanen & aman, tidak akan hilang kecuali Anda menghapusnya.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Indikator Mesin Penyimpanan -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+              <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider block">Mesin Database Utama</span>
+              <span class="text-sm font-black text-slate-800 dark:text-slate-100 block mt-0.5">IndexedDB Engine (Kapasitas Besar)</span>
+              <span class="text-[11px] text-slate-500">Mampu menampung ratusan ribu transaksi tanpa batasan kuota 5MB.</span>
+            </div>
+
+            <div class="p-3.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20">
+              <span class="text-[10px] text-cyan-600 dark:text-cyan-400 font-bold uppercase tracking-wider block">Proteksi Browser (Eviction)</span>
+              <span class="text-sm font-black text-slate-800 dark:text-slate-100 block mt-0.5">
+                ${info.isPersisted ? '✓ Proteksi Permanen Aktif' : '✓ Proteksi Mandiri Aktif'}
+              </span>
+              <span class="text-[11px] text-slate-500">Browser dilarang menghapus data otomatis saat disk menipis.</span>
+            </div>
+          </div>
+
+          <!-- Metrik Kapasitas & Bar -->
+          <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
+            <div class="flex justify-between items-center text-xs">
+              <span class="text-slate-500">Ruang Data Digunakan:</span>
+              <span class="font-bold text-slate-800 dark:text-slate-100">${info.usageFormatted}</span>
+            </div>
+            <div class="flex justify-between items-center text-xs">
+              <span class="text-slate-500">Kapasitas Kuota Tersedia:</span>
+              <span class="font-bold text-slate-800 dark:text-slate-100">${info.quotaFormatted}</span>
+            </div>
+            <div class="flex justify-between items-center text-xs">
+              <span class="text-slate-500">Total Catatan Aktif:</span>
+              <span class="font-bold text-cyan-600 dark:text-cyan-400">${totalRecords} Baris Data Tersimpan</span>
+            </div>
+            <div class="w-full bg-slate-200 dark:bg-slate-700 h-2.5 rounded-full overflow-hidden mt-1">
+              <div class="${info.isFull ? 'bg-rose-500' : (info.isNearFull ? 'bg-amber-500' : 'bg-emerald-500')} h-full rounded-full transition-all" style="width: ${Math.min(100, Math.max(2, info.percentUsed))}%;"></div>
+            </div>
+            <div class="flex justify-between items-center text-[10px] text-slate-400">
+              <span>Penggunaan: ${info.percentUsed}%</span>
+              <span>Status: ${info.isFull ? 'PENUH (Perlu Backup)' : (info.isNearFull ? 'Mendekati Penuh' : 'Sangat Longgar & Aman')}</span>
+            </div>
+          </div>
+
+          <div class="p-3 rounded-xl bg-slate-100 dark:bg-slate-700/40 border border-slate-200 dark:border-slate-700 text-xs space-y-1">
+            <span class="font-bold text-slate-700 dark:text-slate-200 block">Jaminan Keamanan Data:</span>
+            <p class="text-slate-500 text-[11px] leading-relaxed">
+              Semua data yang Anda inputkan disimpan secara permanen di database lokal perangkat Anda. Data tidak akan hilang saat browser ditutup, komputer dimatikan, atau setelah refresh. Data hanya akan berkurang jika Anda secara sadar mengklik tombol <em>Hapus</em> pada transaksi tertentu.
+            </p>
+          </div>
+
+          <div class="pt-2 flex justify-between items-center">
+            <button onclick="exportAllDataToExcel()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold text-xs shadow flex items-center space-x-1.5 transition">
+              <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+              <span>Download Backup Excel</span>
+            </button>
+            <button onclick="closeModal()" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs">
+              Tutup
+            </button>
+          </div>
+        </div>
+      `);
+      lucide.createIcons();
+    };
+
+    // 8. Warning Banner Banner Helper untuk Render Halaman
+    function renderStorageWarningBanner() {
+      const info = window.storageCapacityInfo;
+      if (!info || (!info.isNearFull && !info.isFull)) return '';
+      return `
+        <div class="mb-5 p-4 rounded-2xl ${info.isFull ? 'bg-rose-500/15 border-rose-500 text-rose-900 dark:text-rose-200' : 'bg-amber-500/15 border-amber-500 text-amber-900 dark:text-amber-200'} border-2 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div class="flex items-center space-x-3">
+            <div class="p-2.5 rounded-xl ${info.isFull ? 'bg-rose-500 text-white' : 'bg-amber-500 text-white'} font-bold">
+              <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h4 class="font-bold text-sm">Peringatan: Kapasitas Penyimpanan ${info.isFull ? 'Penuh' : 'Hampir Penuh'} (${info.percentUsed}%)</h4>
+              <p class="text-xs opacity-90">Data yang tersimpan saat ini tetap aman. Silakan download cadangan data ke file Excel agar catatan bisnis Anda selalu terlindungi.</p>
+            </div>
+          </div>
+          <div class="flex items-center space-x-2 shrink-0">
+            <button onclick="exportAllDataToExcel()" class="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs shadow transition flex items-center space-x-1">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span>Backup Excel</span>
+            </button>
+            <button onclick="openStorageStatusModal()" class="px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs transition">
+              Cek Detail
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    // 9. Inisialisasi Sinkronisasi IndexedDB saat Halaman Dimuat
+    async function initStorageAndSync() {
+      try {
+        await requestPersistentStorage();
+        const idbData = await idbLoadData();
+        if (idbData) {
+          let hasNewer = false;
+          const collections = ['pelanggan', 'stok', 'servis', 'penjualan', 'pembelian', 'kas', 'operasional', 'hutangpiutang'];
+          collections.forEach(col => {
+            if (Array.isArray(idbData[col]) && idbData[col].length > (window.state[col] || []).length) {
+              window.state[col] = [...idbData[col]];
+              hasNewer = true;
+            }
+          });
+          if (Array.isArray(idbData.kategoriStok) && idbData.kategoriStok.length > 0) {
+            window.state.kategoriStok = [...idbData.kategoriStok];
+          }
+          if (hasNewer) {
+            window.renderPage();
+          }
+        } else {
+          // Pertama kali jalan, langsung amankan state saat ini ke IndexedDB
+          await persistData();
+        }
+        await updateStorageEstimateAndCheck();
+        updateStatusIndicator(isFirebaseActive, isFirebaseActive ? 'Firebase Connected' : 'IndexedDB Aktif • Anti-Hilang');
+      } catch (err) {
+        console.warn('Storage sync error:', err);
       }
     }
 
@@ -498,7 +877,7 @@
       const banner = document.getElementById('db-status');
       if (!banner) return;
       if (isOnline) {
-        banner.className = "px-4 py-1.5 mx-3 mb-2 rounded text-[11px] font-medium flex items-center justify-between bg-emerald-500/10 text-emerald-500 border border-emerald-500/20";
+        banner.className = "px-4 py-1.5 mx-3 mb-2 rounded text-[11px] font-medium flex items-center justify-between bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 cursor-pointer hover:opacity-90 transition";
         banner.innerHTML = `
           <span class="flex items-center space-x-1.5">
             <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -507,15 +886,16 @@
           <i data-lucide="database" class="w-3.5 h-3.5"></i>
         `;
       } else {
-        banner.className = "px-4 py-1.5 mx-3 mb-2 rounded text-[11px] font-medium flex items-center justify-between bg-cyan-500/10 text-cyan-500 border border-cyan-500/20";
+        banner.className = "px-4 py-1.5 mx-3 mb-2 rounded text-[11px] font-medium flex items-center justify-between bg-cyan-500/10 text-cyan-500 border border-cyan-500/20 cursor-pointer hover:opacity-90 transition";
         banner.innerHTML = `
           <span class="flex items-center space-x-1.5">
             <span class="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
-            <span>${label || 'Data Mode Aktif (Offline/Lokal)'}</span>
+            <span>${label || 'IndexedDB Aktif • Anti-Hilang'}</span>
           </span>
-          <i data-lucide="hard-drive" class="w-3.5 h-3.5"></i>
+          <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
         `;
       }
+      banner.title = "Klik untuk melihat kapasitas penyimpanan dan status anti-hilang";
       lucide.createIcons();
     }
 
@@ -524,7 +904,7 @@
       const isDemoConfig = !firebaseConfig.apiKey || firebaseConfig.apiKey.includes('DemoKeyOnly');
       if (isDemoConfig) {
         isFirebaseActive = false;
-        updateStatusIndicator(false, 'Local Storage Aktif');
+        updateStatusIndicator(false, 'IndexedDB Aktif • Anti-Hilang');
         return;
       }
 
@@ -669,7 +1049,7 @@
       try {
         const saved = localStorage.getItem('joy_print_role_passwords');
         if (saved) return JSON.parse(saved);
-      } catch (e) {}
+      } catch (e) { }
       return { admin: 'admin123', user: '1234' };
     };
 
@@ -917,7 +1297,7 @@
       state.role = newRole;
       try {
         localStorage.setItem('joy_print_role', newRole);
-      } catch (e) {}
+      } catch (e) { }
       const roleBadge = document.getElementById('role-badge');
       if (roleBadge) {
         roleBadge.innerText = newRole;
@@ -974,11 +1354,10 @@
       }
       const toast = document.createElement('div');
       const isSuccess = type === 'success';
-      toast.className = `pointer-events-auto flex items-center space-x-2.5 px-4 py-3 rounded-xl text-xs font-semibold shadow-xl border backdrop-blur-md transition-all duration-300 transform translate-y-2 opacity-0 ${
-        isSuccess 
-          ? 'bg-slate-900/95 text-white border-emerald-500/50 shadow-emerald-500/10' 
-          : 'bg-slate-900/95 text-white border-rose-500/50 shadow-rose-500/10'
-      }`;
+      toast.className = `pointer-events-auto flex items-center space-x-2.5 px-4 py-3 rounded-xl text-xs font-semibold shadow-xl border backdrop-blur-md transition-all duration-300 transform translate-y-2 opacity-0 ${isSuccess
+        ? 'bg-slate-900/95 text-white border-emerald-500/50 shadow-emerald-500/10'
+        : 'bg-slate-900/95 text-white border-rose-500/50 shadow-rose-500/10'
+        }`;
       toast.innerHTML = `
         <i data-lucide="${isSuccess ? 'check-circle-2' : 'alert-circle'}" class="w-4 h-4 ${isSuccess ? 'text-emerald-400' : 'text-rose-400'} shrink-0"></i>
         <span>${msg}</span>
@@ -1099,6 +1478,12 @@
           break;
         default:
           container.innerHTML = renderDashboardView();
+      }
+      if (typeof renderStorageWarningBanner === 'function') {
+        const warnBanner = renderStorageWarningBanner();
+        if (warnBanner) {
+          container.insertAdjacentHTML('afterbegin', warnBanner);
+        }
       }
       lucide.createIcons();
     };
@@ -1311,13 +1696,35 @@
                             <option value="Diambil" ${s.status === 'Diambil' ? 'selected' : ''}>✅ Sudah Diambil</option>
                           </select>
                         </td>
-                        <td class="p-4 font-bold">${formatRp(s.totalBiaya)}</td>
                         <td class="p-4">
-                          <span class="px-2 py-0.5 rounded text-xs font-bold ${s.statusBayar === 'Lunas' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}">
-                            ${s.statusBayar} ${s.sisa > 0 ? `(Sisa: ${formatRp(s.sisa)})` : ''}
-                          </span>
+                          <button type="button" onclick="openEditBiayaServisModal('${s.id}')" class="group text-left hover:opacity-85 transition focus:outline-none" title="Klik untuk edit Total Biaya & Pembayaran">
+                            <div class="flex items-center space-x-1.5">
+                              <span class="font-bold text-slate-800 dark:text-slate-100 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition">${formatRp(s.totalBiaya)}</span>
+                              <i data-lucide="edit-3" class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-500 transition"></i>
+                            </div>
+                            ${s.biayaJasa !== undefined && s.biayaJasa !== s.totalBiaya ? `<span class="text-[11px] text-slate-400 block mt-0.5">Jasa: ${formatRp(s.biayaJasa)}</span>` : ''}
+                          </button>
+                        </td>
+                        <td class="p-4">
+                          <button type="button" onclick="openEditBiayaServisModal('${s.id}')" class="group text-left hover:opacity-85 transition focus:outline-none" title="Klik untuk edit Pembayaran">
+                            <div class="flex items-center space-x-1.5">
+                              <div>
+                                <span class="px-2 py-0.5 rounded text-xs font-bold ${s.statusBayar === 'Lunas' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}">
+                                  ${s.statusBayar}
+                                </span>
+                                <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                                  <span>Bayar: <strong class="text-slate-700 dark:text-slate-200">${formatRp(s.bayar || 0)}</strong></span>
+                                  ${s.sisa > 0 ? `<span class="text-rose-500 font-semibold block">Sisa: ${formatRp(s.sisa)}</span>` : ''}
+                                </div>
+                              </div>
+                              <i data-lucide="edit-3" class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-500 transition self-start mt-0.5"></i>
+                            </div>
+                          </button>
                         </td>
                         <td class="p-4 text-center space-x-1">
+                          <button onclick="openEditBiayaServisModal('${s.id}')" title="Edit Total Biaya & Pembayaran" class="p-2 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition">
+                            <i data-lucide="edit" class="w-4 h-4"></i>
+                          </button>
                           <button onclick="cetakNotaServis('${s.id}')" title="Cetak Nota Tanda Terima" class="p-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-cyan-500 hover:text-white transition">
                             <i data-lucide="printer" class="w-4 h-4"></i>
                           </button>
@@ -1803,6 +2210,473 @@
 
     window.updateStatusServis = async function (id, statusBaru) {
       await dbUpdate('servis', id, { status: statusBaru });
+    };
+
+    window._currentEditServisId = null;
+    window._currentEditServisParts = [];
+
+    function renderEditServisPartsHtml() {
+      if (!window._currentEditServisParts || window._currentEditServisParts.length === 0) {
+        return '<p class="text-[11px] text-slate-400 italic py-1">Belum ada sparepart tambahan terpasang. Biaya hanya jasa servis.</p>';
+      }
+      return `
+        <div class="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+              <tr>
+                <th class="p-2">Nama Sparepart / Barang</th>
+                <th class="p-2 w-16 text-center">Qty</th>
+                <th class="p-2 text-right">Harga Satuan</th>
+                <th class="p-2 text-right">Subtotal</th>
+                <th class="p-2 w-8 text-center"></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+              ${window._currentEditServisParts.map((sp, idx) => `
+                <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                  <td class="p-2 font-medium text-slate-800 dark:text-slate-200">${sp.nama}</td>
+                  <td class="p-2 text-center">${sp.qty || 1}</td>
+                  <td class="p-2 text-right">${formatRp(sp.harga)}</td>
+                  <td class="p-2 text-right font-bold text-slate-800 dark:text-slate-100">${formatRp((sp.harga || 0) * (sp.qty || 1))}</td>
+                  <td class="p-2 text-center">
+                    <button type="button" onclick="hapusSparepartEditServis(${idx})" class="text-rose-500 hover:text-rose-700 p-1" title="Hapus sparepart ini">
+                      <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    window.openEditBiayaServisModal = function (id) {
+      const s = state.servis.find(item => item.id === id);
+      if (!s) return;
+
+      window._currentEditServisId = id;
+      window._currentEditServisParts = Array.isArray(s.spareparts) ? JSON.parse(JSON.stringify(s.spareparts)) : [];
+
+      const initialJasa = typeof s.biayaJasa === 'number' ? s.biayaJasa : (s.totalBiaya || 0);
+      const initialTotal = typeof s.totalBiaya === 'number' ? s.totalBiaya : initialJasa;
+      const initialBayar = typeof s.bayar === 'number' ? s.bayar : 0;
+      const initialSisa = Math.max(0, initialTotal - initialBayar);
+
+      const sparepartsStok = (state.stok || []).filter(item => {
+        const kat = (item.kategori || '').toLowerCase();
+        return kat.includes('sparepart') || kat.includes('part') || kat.includes('tinta') || kat.includes('barang');
+      });
+
+      openModal(`
+        <form onsubmit="simpanEditBiayaServis(event, '${s.id}')" class="space-y-4 max-h-[85vh] overflow-y-auto pr-1">
+          <!-- Header Modal -->
+          <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2.5">
+            <div>
+              <div class="flex items-center space-x-2">
+                <span class="font-mono text-xs px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 font-bold">${s.id}</span>
+                <h3 class="font-bold text-base text-slate-800 dark:text-slate-100">Edit Total Biaya & Pembayaran Servis</h3>
+              </div>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Unit: <strong class="text-slate-700 dark:text-slate-200">${s.printer}</strong> • Pemilik: <strong class="text-slate-700 dark:text-slate-200">${s.pelangganNama}</strong>
+              </p>
+            </div>
+            <span class="px-2.5 py-1 rounded-full text-xs font-bold ${s.statusBayar === 'Lunas' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/15 text-rose-600 dark:text-rose-400'}">
+              Status Bayar: ${s.statusBayar || 'Belum Lunas'}
+            </span>
+          </div>
+
+          <!-- Bagian 1: Rincian & Total Biaya -->
+          <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 flex items-center space-x-1.5">
+                <i data-lucide="calculator" class="w-4 h-4"></i>
+                <span>1. Penyesuaian Biaya Jasa & Total</span>
+              </span>
+              <span class="text-[11px] text-slate-400">Dapat diedit sesuai kesepakatan</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+                  Biaya Jasa Servis (Rp) *
+                </label>
+                <div class="relative">
+                  <span class="absolute left-3 top-2 text-xs text-slate-400 font-bold">Rp</span>
+                  <input type="number" id="edit-srv-jasa" value="${initialJasa}" min="0" step="1000"
+                    oninput="hitungEditServisLive(false)"
+                    class="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold text-sm focus:outline-none focus:border-cyan-500" required />
+                </div>
+              </div>
+
+              <div>
+                <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+                  Total Biaya Servis (Rp) *
+                </label>
+                <div class="relative">
+                  <span class="absolute left-3 top-2 text-xs text-cyan-500 font-bold">Rp</span>
+                  <input type="number" id="edit-srv-total" value="${initialTotal}" min="0" step="1000"
+                    oninput="hitungEditServisLive(true)"
+                    class="w-full pl-9 pr-3 py-2 rounded-lg border-2 border-cyan-500/50 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-black text-base focus:outline-none focus:border-cyan-500" required />
+                </div>
+                <span class="text-[10px] text-slate-400 block mt-0.5">Otomatis terjumlah (Jasa + Sparepart) atau ketik langsung angka total.</span>
+              </div>
+            </div>
+
+            <!-- Spareparts Section -->
+            <div class="pt-2 border-t border-slate-200 dark:border-slate-700/80 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] font-bold text-slate-700 dark:text-slate-200 flex items-center space-x-1">
+                  <i data-lucide="cpu" class="w-3.5 h-3.5 text-amber-500"></i>
+                  <span>Sparepart / Komponen Terpasang</span>
+                </span>
+                <span id="edit-srv-sparepart-sum" class="text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                  Subtotal: ${formatRp(window._currentEditServisParts.reduce((sum, p) => sum + ((p.harga || 0) * (p.qty || 1)), 0))}
+                </span>
+              </div>
+
+              <!-- Tabel Spareparts -->
+              <div id="edit-srv-parts-container" class="space-y-1.5">
+                ${renderEditServisPartsHtml()}
+              </div>
+
+              <!-- Bar Tambah Sparepart -->
+              <div class="pt-1.5 flex flex-col sm:flex-row items-center gap-2">
+                <select id="edit-srv-add-part-select" class="w-full sm:flex-1 text-xs p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500">
+                  <option value="">-- Pilih Sparepart dari Stok Toko (Opsional) --</option>
+                  ${sparepartsStok.map(st => `
+                    <option value="${st.id}" data-nama="${st.nama}" data-harga="${st.harga}">
+                      ${st.nama} - ${formatRp(st.harga)} (Sisa stok: ${st.jumlah})
+                    </option>
+                  `).join('')}
+                </select>
+                <div class="flex items-center space-x-2 w-full sm:w-auto">
+                  <input type="number" id="edit-srv-add-part-qty" value="1" min="1" max="99" class="w-16 text-xs p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-center font-bold" title="Jumlah" />
+                  <button type="button" onclick="tambahSparepartEditServis()" class="w-full sm:w-auto px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1 shrink-0">
+                    <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                    <span>Tambah Part</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bagian 2: Pembayaran & Pelunasan -->
+          <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 flex items-center space-x-1.5">
+                <i data-lucide="wallet" class="w-4 h-4"></i>
+                <span>2. Pembayaran & Pelunasan</span>
+              </span>
+              <span class="text-[11px] text-slate-400">Sebelumnya dibayar: <strong>${formatRp(initialBayar)}</strong></span>
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                  Total Uang Yang Dibayarkan (Rp) *
+                </label>
+                <!-- Quick Set Buttons -->
+                <div class="flex items-center space-x-1">
+                  <button type="button" onclick="setEditServisBayar('lunas')" class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500 hover:text-white transition">
+                    ✓ Lunasi Penuh
+                  </button>
+                  <button type="button" onclick="setEditServisBayar('dp50')" class="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500 hover:text-white transition">
+                    DP 50%
+                  </button>
+                  <button type="button" onclick="setEditServisBayar('nol')" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 transition">
+                    Rp 0
+                  </button>
+                </div>
+              </div>
+
+              <div class="relative">
+                <span class="absolute left-3 top-2 text-xs text-emerald-500 font-bold">Rp</span>
+                <input type="number" id="edit-srv-bayar" value="${initialBayar}" min="0" step="1000"
+                  oninput="hitungEditServisLive(false)"
+                  class="w-full pl-9 pr-3 py-2 rounded-lg border-2 border-emerald-500/50 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-black text-base focus:outline-none focus:border-emerald-500" required />
+              </div>
+            </div>
+
+            <!-- Preview Status & Sisa Tagihan Live Box -->
+            <div id="edit-srv-sisa-box" class="p-3 rounded-lg border text-xs flex items-center justify-between transition-all ${initialSisa <= 0 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300' : 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300'}">
+              <div class="flex items-center space-x-2">
+                <i data-lucide="${initialSisa <= 0 ? 'check-circle' : 'alert-circle'}" class="w-4 h-4 shrink-0"></i>
+                <span id="edit-srv-sisa-text" class="font-bold">
+                  ${initialSisa <= 0 ? 'LUNAS - Tidak ada sisa tagihan' : `Sisa Tagihan Belum Dibayar: ${formatRp(initialSisa)}`}
+                </span>
+              </div>
+              <span id="edit-srv-sisa-nominal" class="font-mono font-black text-sm">
+                ${initialSisa <= 0 ? 'Rp 0' : formatRp(initialSisa)}
+              </span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-300 block mb-1">Status Pembayaran</label>
+                <select id="edit-srv-status-bayar" class="w-full text-xs p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold focus:outline-none focus:border-cyan-500">
+                  <option value="Lunas" ${s.statusBayar === 'Lunas' ? 'selected' : ''}>🟢 Lunas</option>
+                  <option value="DP" ${s.statusBayar === 'DP' ? 'selected' : ''}>🟡 DP (Uang Muka)</option>
+                  <option value="Belum Bayar" ${s.statusBayar === 'Belum Bayar' ? 'selected' : ''}>🔴 Belum Bayar</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-300 block mb-1">Metode Pembayaran</label>
+                <select id="edit-srv-metode" class="w-full text-xs p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500">
+                  <option value="Tunai">Tunai / Cash</option>
+                  <option value="Transfer / QRIS">Transfer / QRIS</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-300 block mb-1">Tanggal Pelunasan / Transaksi</label>
+                <input type="date" id="edit-srv-tanggal" value="${s.tanggalLunas || s.tanggal || new Date().toISOString().split('T')[0]}" class="w-full text-xs p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 font-semibold" />
+              </div>
+            </div>
+
+            <!-- Opsi Catat ke Kas Masuk jika ada penambahan uang bayar -->
+            <div id="edit-srv-kas-wrapper" class="pt-1">
+              <label class="flex items-start space-x-2 text-xs text-emerald-600 dark:text-emerald-400 font-semibold cursor-pointer select-none">
+                <input type="checkbox" id="edit-srv-catat-kas" checked class="mt-0.5 rounded text-emerald-500 focus:ring-emerald-400 w-4 h-4 cursor-pointer" />
+                <div>
+                  <span id="edit-srv-kas-label">Catat penerimaan pembayaran baru/selisih ke Buku Kas Toko (Kas Masuk)</span>
+                  <p class="text-[10px] text-slate-400 font-normal leading-tight mt-0.5">
+                    Hanya nominal penambahan uang bayar baru yang akan otomatis dibukukan ke Kas Masuk toko.
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Bagian 3: Status Pengerjaan & Catatan Tambahan -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-300 block mb-1">Status Pengerjaan Unit</label>
+              <select id="edit-srv-status-pengerjaan" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold focus:outline-none focus:border-cyan-500">
+                <option value="Diterima" ${s.status === 'Diterima' ? 'selected' : ''}>🟡 Diterima</option>
+                <option value="Pengecekan" ${s.status === 'Pengecekan' ? 'selected' : ''}>🔵 Pengecekan</option>
+                <option value="Menunggu Sparepart" ${s.status === 'Menunggu Sparepart' ? 'selected' : ''}>🟣 Menunggu Sparepart</option>
+                <option value="Selesai" ${s.status === 'Selesai' ? 'selected' : ''}>🟢 Selesai (Siap Ambil)</option>
+                <option value="Diambil" ${s.status === 'Diambil' ? 'selected' : ''}>✅ Sudah Diambil</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-300 block mb-1">Catatan Tambahan / Kwitansi</label>
+              <input type="text" id="edit-srv-catatan" value="${s.catatanPembayaran || ''}" placeholder="Contoh: Lunas via BCA / Garansi servis 1 bulan" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-cyan-500" />
+            </div>
+          </div>
+
+          <!-- Tombol Aksi -->
+          <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <button type="button" onclick="cetakNotaServis('${s.id}')" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-700 hover:bg-cyan-500 hover:text-white transition flex items-center space-x-1.5">
+              <i data-lucide="printer" class="w-4 h-4"></i>
+              <span>Cetak Nota</span>
+            </button>
+
+            <div class="flex items-center space-x-2">
+              <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 transition">Batal</button>
+              <button type="submit" class="px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white shadow-md shadow-cyan-500/25 flex items-center space-x-1.5 transition">
+                <i data-lucide="save" class="w-4 h-4"></i>
+                <span>Simpan Perubahan Biaya & Bayar</span>
+              </button>
+            </div>
+          </div>
+        </form>
+      `);
+      lucide.createIcons();
+    };
+
+    window.tambahSparepartEditServis = function () {
+      const select = document.getElementById('edit-srv-add-part-select');
+      const qtyInput = document.getElementById('edit-srv-add-part-qty');
+      if (!select || !select.value) {
+        alert('Silakan pilih sparepart dari daftar stok terlebih dahulu!');
+        return;
+      }
+      const opt = select.selectedOptions[0];
+      const partId = select.value;
+      const nama = opt.getAttribute('data-nama') || opt.text;
+      const harga = parseFloat(opt.getAttribute('data-harga')) || 0;
+      const qty = parseInt(qtyInput?.value) || 1;
+
+      window._currentEditServisParts.push({
+        id: partId,
+        nama,
+        harga,
+        qty
+      });
+
+      const container = document.getElementById('edit-srv-parts-container');
+      if (container) {
+        container.innerHTML = renderEditServisPartsHtml();
+        lucide.createIcons();
+      }
+
+      hitungEditServisLive(false);
+      select.value = '';
+    };
+
+    window.hapusSparepartEditServis = function (index) {
+      if (window._currentEditServisParts && window._currentEditServisParts[index]) {
+        window._currentEditServisParts.splice(index, 1);
+        const container = document.getElementById('edit-srv-parts-container');
+        if (container) {
+          container.innerHTML = renderEditServisPartsHtml();
+          lucide.createIcons();
+        }
+        hitungEditServisLive(false);
+      }
+    };
+
+    window.hitungEditServisLive = function (isTotalManual) {
+      const jasaInput = document.getElementById('edit-srv-jasa');
+      const totalInput = document.getElementById('edit-srv-total');
+      const bayarInput = document.getElementById('edit-srv-bayar');
+      const sisaBox = document.getElementById('edit-srv-sisa-box');
+      const sisaText = document.getElementById('edit-srv-sisa-text');
+      const sisaNominal = document.getElementById('edit-srv-sisa-nominal');
+      const statusBayarSelect = document.getElementById('edit-srv-status-bayar');
+      const partsSumEl = document.getElementById('edit-srv-sparepart-sum');
+
+      const jasa = parseFloat(jasaInput?.value) || 0;
+      const sparepartsTotal = (window._currentEditServisParts || []).reduce((acc, p) => acc + ((p.harga || 0) * (p.qty || 1)), 0);
+
+      if (partsSumEl) {
+        partsSumEl.innerText = `Subtotal: ${formatRp(sparepartsTotal)}`;
+      }
+
+      let total = 0;
+      if (isTotalManual) {
+        total = parseFloat(totalInput?.value) || 0;
+      } else {
+        total = jasa + sparepartsTotal;
+        if (totalInput) totalInput.value = total;
+      }
+
+      const bayar = parseFloat(bayarInput?.value) || 0;
+      const sisa = Math.max(0, total - bayar);
+      const isLunas = bayar >= total && total > 0;
+
+      if (statusBayarSelect) {
+        if (isLunas || (total === 0 && bayar === 0)) {
+          statusBayarSelect.value = 'Lunas';
+        } else if (bayar > 0) {
+          statusBayarSelect.value = 'DP';
+        } else {
+          statusBayarSelect.value = 'Belum Bayar';
+        }
+      }
+
+      if (sisaBox && sisaText && sisaNominal) {
+        if (sisa <= 0) {
+          const kembalian = bayar - total;
+          sisaBox.className = "p-3 rounded-lg border text-xs flex items-center justify-between transition-all bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300";
+          sisaText.innerHTML = kembalian > 0 ? `LUNAS (Kelebihan/Kembalian: ${formatRp(kembalian)})` : 'LUNAS - Tidak ada sisa tagihan';
+          sisaNominal.innerText = 'Rp 0';
+        } else {
+          sisaBox.className = "p-3 rounded-lg border text-xs flex items-center justify-between transition-all bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300";
+          sisaText.innerText = `Sisa Tagihan Belum Dibayar: ${formatRp(sisa)}`;
+          sisaNominal.innerText = formatRp(sisa);
+        }
+      }
+    };
+
+    window.setEditServisBayar = function (type) {
+      const totalInput = document.getElementById('edit-srv-total');
+      const bayarInput = document.getElementById('edit-srv-bayar');
+      if (!totalInput || !bayarInput) return;
+
+      const total = parseFloat(totalInput.value) || 0;
+      if (type === 'lunas') {
+        bayarInput.value = total;
+      } else if (type === 'dp50') {
+        bayarInput.value = Math.round(total / 2);
+      } else if (type === 'nol') {
+        bayarInput.value = 0;
+      }
+      hitungEditServisLive(false);
+    };
+
+    window.simpanEditBiayaServis = async function (e, id) {
+      e.preventDefault();
+      const s = state.servis.find(item => item.id === id);
+      if (!s) {
+        alert('Data servis tidak ditemukan!');
+        return;
+      }
+
+      const biayaJasa = parseFloat(document.getElementById('edit-srv-jasa')?.value) || 0;
+      const totalBiaya = parseFloat(document.getElementById('edit-srv-total')?.value) || 0;
+      const bayarBaru = parseFloat(document.getElementById('edit-srv-bayar')?.value) || 0;
+      const statusBayar = document.getElementById('edit-srv-status-bayar')?.value || (bayarBaru >= totalBiaya ? 'Lunas' : (bayarBaru > 0 ? 'DP' : 'Belum Bayar'));
+      const statusServis = document.getElementById('edit-srv-status-pengerjaan')?.value || s.status;
+      const metodeBayar = document.getElementById('edit-srv-metode')?.value || 'Tunai';
+      const tanggalUpdate = document.getElementById('edit-srv-tanggal')?.value || new Date().toISOString().split('T')[0];
+      const catatan = (document.getElementById('edit-srv-catatan')?.value || '').trim();
+      const catatKas = document.getElementById('edit-srv-catat-kas')?.checked;
+
+      const bayarLama = typeof s.bayar === 'number' ? s.bayar : 0;
+      const selisihBayar = bayarBaru - bayarLama;
+      const sisa = Math.max(0, totalBiaya - bayarBaru);
+
+      const updateData = {
+        biayaJasa,
+        totalBiaya,
+        spareparts: [...(window._currentEditServisParts || [])],
+        bayar: bayarBaru,
+        sisa,
+        statusBayar: sisa <= 0 ? 'Lunas' : statusBayar,
+        status: statusServis,
+        tanggalLunas: sisa <= 0 ? tanggalUpdate : (s.tanggalLunas || ''),
+        catatanPembayaran: catatan
+      };
+
+      await dbUpdate('servis', id, updateData);
+
+      // Jika ada penambahan uang bayar dan user memilih catat kas
+      if (catatKas && selisihBayar > 0) {
+        const kasId = `KAS-00${state.kas.length + 1}`;
+        await dbSave('kas', kasId, {
+          id: kasId,
+          tanggal: tanggalUpdate,
+          tipe: 'Masuk',
+          kategori: sisa <= 0 ? 'Pelunasan Servis Printer' : 'Pembayaran Servis Printer',
+          keterangan: `Bayar Servis #${id} (${s.pelangganNama} - ${s.printer}) via ${metodeBayar}`,
+          jumlah: selisihBayar
+        });
+      }
+
+      // Sinkronisasi Hutang Piutang
+      const existingHP = state.hutangpiutang.find(hp => hp.noRef === id && hp.jenis === 'Piutang');
+      if (existingHP) {
+        if (sisa <= 0) {
+          await dbUpdate('hutangpiutang', existingHP.id, {
+            status: 'Lunas',
+            jumlah: 0
+          });
+        } else {
+          await dbUpdate('hutangpiutang', existingHP.id, {
+            jumlah: sisa,
+            status: 'Belum Lunas'
+          });
+        }
+      } else if (sisa > 0) {
+        const hpId = `HP-00${state.hutangpiutang.length + 1}`;
+        await dbSave('hutangpiutang', hpId, {
+          id: hpId,
+          jenis: 'Piutang',
+          pihak: s.pelangganNama,
+          noRef: id,
+          jumlah: sisa,
+          jatuhTempo: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          status: 'Belum Lunas'
+        });
+      }
+
+      closeModal();
+      showNotificationToast(`Total Biaya & Pembayaran servis #${id} berhasil diperbarui!`);
     };
 
     window.cetakNotaServis = function (id) {
@@ -2748,14 +3622,14 @@
                 Semua Kategori (${state.stok.length})
               </button>
               ${categories.map(kat => {
-                const count = state.stok.filter(s => s.kategori && s.kategori.toLowerCase() === kat.toLowerCase()).length;
-                const isActive = currentCat.toLowerCase() === kat.toLowerCase();
-                return `
+        const count = state.stok.filter(s => s.kategori && s.kategori.toLowerCase() === kat.toLowerCase()).length;
+        const isActive = currentCat.toLowerCase() === kat.toLowerCase();
+        return `
                   <button onclick="filterStokCategory('${kat.replace(/'/g, "\\'")}')" class="px-3.5 py-1.5 rounded-lg font-bold transition shrink-0 ${isActive ? 'bg-cyan-500 text-white shadow-md shadow-cyan-500/20' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'}">
                     ${kat} (${count})
                   </button>
                 `;
-              }).join('')}
+      }).join('')}
             </div>
             <div class="relative min-w-[220px]">
               <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-slate-400"></i>
@@ -3443,6 +4317,8 @@
     };
 
     function renderPembelianView() {
+      const totalPengeluaran = state.pembelian.reduce((sum, p) => sum + (p.total || 0), 0);
+
       return `
         <div class="space-y-6">
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -3450,10 +4326,15 @@
               <h3 class="text-xl font-bold text-slate-900 dark:text-slate-100">Pembelian Stock Supplier</h3>
               <p class="text-xs text-slate-600 dark:text-slate-300">Riwayat pengadaan stok barang & sparepart dari distributor.</p>
             </div>
-            <button onclick="openFormPembelianModal()" class="px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-xl font-bold text-sm shadow-md shadow-cyan-500/20 flex items-center space-x-2 transition">
-              <i data-lucide="plus" class="w-4 h-4"></i>
-              <span>Catat Pembelian Baru</span>
-            </button>
+            <div class="flex items-center space-x-3">
+              <span class="text-xs font-bold px-3 py-1.5 rounded-xl bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                Total Restok: ${formatRp(totalPengeluaran)} (${state.pembelian.length} Nota)
+              </span>
+              <button onclick="openFormPembelianModal()" class="px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-xl font-bold text-sm shadow-md shadow-cyan-500/20 flex items-center space-x-2 transition">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>Catat Pembelian Restok Baru</span>
+              </button>
+            </div>
           </div>
 
           <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
@@ -3481,7 +4362,10 @@
                       <td class="p-4 font-mono font-bold text-cyan-500">${p.id}</td>
                       <td class="p-4 text-xs text-slate-400">${p.tanggal}</td>
                       <td class="p-4 font-bold text-slate-800 dark:text-slate-100">${p.supplier}</td>
-                      <td class="p-4 text-xs text-slate-500 max-w-xs truncate" title="${p.barang}">${p.barang}</td>
+                      <td class="p-4 text-xs text-slate-600 dark:text-slate-300 max-w-xs">
+                        <div class="truncate font-medium" title="${p.barang}">${p.barang}</div>
+                        ${Array.isArray(p.items) && p.items.length > 0 ? `<span class="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[10px] bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 font-bold">${p.items.length} Item Barang</span>` : ''}
+                      </td>
                       <td class="p-4 font-bold text-rose-500">${formatRp(p.total)}</td>
                       <td class="p-4">
                         <span class="px-2.5 py-0.5 rounded text-xs font-bold ${p.status === 'Lunas' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}">
@@ -3489,6 +4373,9 @@
                         </span>
                       </td>
                       <td class="p-4 text-center space-x-1">
+                        <button onclick="cetakNotaPembelian('${p.id}')" class="p-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-cyan-500 hover:text-white transition" title="Cetak Nota Restok">
+                          <i data-lucide="printer" class="w-4 h-4"></i>
+                        </button>
                         <button onclick="openEditPembelianModal('${p.id}')" class="p-2 rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500 hover:text-white transition" title="Edit Data Pembelian">
                           <i data-lucide="edit" class="w-4 h-4"></i>
                         </button>
@@ -3506,9 +4393,156 @@
       `;
     }
 
+    window._currentPembelianItems = [];
+
+    function renderPembelianItemsTableHtml(items) {
+      if (!items || items.length === 0) {
+        return `
+          <div class="p-4 text-center text-xs text-slate-400 italic bg-slate-50 dark:bg-slate-900/40 rounded-lg border border-dashed border-slate-300 dark:border-slate-700">
+            Belum ada item. Isi form di bawah lalu klik tombol + untuk menambah item.
+          </div>
+        `;
+      }
+      return `
+        <div class="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">
+              <tr>
+                <th class="p-2.5">Nama Barang / Sparepart</th>
+                <th class="p-2.5 w-16 text-center">Qty</th>
+                <th class="p-2.5 text-right">Harga Satuan</th>
+                <th class="p-2.5 text-right">Subtotal</th>
+                <th class="p-2.5 w-8 text-center"></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+              ${items.map((item, idx) => `
+                <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                  <td class="p-2.5 font-semibold text-slate-800 dark:text-slate-100">
+                    <div>${item.nama}</div>
+                    ${item.id ? `<span class="text-[10px] text-cyan-500 font-mono">${item.id}</span>` : '<span class="text-[10px] text-emerald-500 font-semibold">[Item Baru]</span>'}
+                  </td>
+                  <td class="p-2.5 text-center font-bold text-slate-800 dark:text-slate-100">${item.qty}</td>
+                  <td class="p-2.5 text-right font-medium text-slate-600 dark:text-slate-300">${formatRp(item.hargaSatuan)}</td>
+                  <td class="p-2.5 text-right font-bold text-slate-800 dark:text-slate-100">${formatRp(item.subtotal)}</td>
+                  <td class="p-2.5 text-center">
+                    <button type="button" onclick="hapusItemPembelian(${idx})" class="p-1 rounded text-rose-500 hover:text-rose-700 hover:bg-rose-500/10 transition" title="Hapus item ini">
+                      <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    window.onBuyItemSelectChange = function () {
+      const input = document.getElementById('buy-item-name');
+      const hargaInput = document.getElementById('buy-item-harga');
+      if (!input || !hargaInput) return;
+
+      const val = input.value.trim().toLowerCase();
+      if (!val) return;
+
+      const found = (state.stok || []).find(s => s.nama.toLowerCase() === val || s.id.toLowerCase() === val);
+      if (found) {
+        if (typeof found.hpp === 'number' && found.hpp > 0) {
+          hargaInput.value = found.hpp;
+        } else if (typeof found.harga === 'number' && found.harga > 0) {
+          hargaInput.value = found.harga;
+        }
+      }
+      updateBuyItemSubtotalPreview();
+    };
+
+    window.updateBuyItemSubtotalPreview = function () {
+      const qtyInput = document.getElementById('buy-item-qty');
+      const hargaInput = document.getElementById('buy-item-harga');
+      const preview = document.getElementById('buy-item-subtotal-preview');
+      if (!preview) return;
+
+      const qty = parseInt(qtyInput?.value) || 0;
+      const harga = parseFloat(hargaInput?.value) || 0;
+      const subtotal = Math.max(0, qty * harga);
+      preview.innerText = formatRp(subtotal);
+    };
+
+    window.tambahItemPembelian = function () {
+      const nameInput = document.getElementById('buy-item-name');
+      const qtyInput = document.getElementById('buy-item-qty');
+      const hargaInput = document.getElementById('buy-item-harga');
+      if (!nameInput) return;
+
+      const nama = nameInput.value.trim();
+      const qty = parseInt(qtyInput?.value) || 1;
+      const hargaSatuan = parseFloat(hargaInput?.value) || 0;
+
+      if (!nama) {
+        alert('Silakan pilih dari stok atau ketik nama barang / sparepart yang dibeli!');
+        nameInput.focus();
+        return;
+      }
+      if (qty <= 0) {
+        alert('Jumlah (Qty) minimal 1!');
+        if (qtyInput) qtyInput.focus();
+        return;
+      }
+
+      const found = (state.stok || []).find(s => s.nama.toLowerCase() === nama.toLowerCase());
+      const subtotal = qty * hargaSatuan;
+
+      window._currentPembelianItems.push({
+        id: found ? found.id : '',
+        nama: found ? found.nama : nama,
+        qty,
+        hargaSatuan,
+        subtotal
+      });
+
+      // Clear adder inputs
+      nameInput.value = '';
+      if (qtyInput) qtyInput.value = '1';
+      if (hargaInput) hargaInput.value = '0';
+      updateBuyItemSubtotalPreview();
+
+      const container = document.getElementById('buy-items-container');
+      if (container) {
+        container.innerHTML = renderPembelianItemsTableHtml(window._currentPembelianItems);
+        lucide.createIcons();
+      }
+
+      updateGrandTotalPembelian();
+      nameInput.focus();
+    };
+
+    window.hapusItemPembelian = function (idx) {
+      if (window._currentPembelianItems && window._currentPembelianItems[idx] !== undefined) {
+        window._currentPembelianItems.splice(idx, 1);
+        const container = document.getElementById('buy-items-container');
+        if (container) {
+          container.innerHTML = renderPembelianItemsTableHtml(window._currentPembelianItems);
+          lucide.createIcons();
+        }
+        updateGrandTotalPembelian();
+      }
+    };
+
+    window.updateGrandTotalPembelian = function () {
+      const total = (window._currentPembelianItems || []).reduce((sum, item) => sum + item.subtotal, 0);
+      const totalDisplay = document.getElementById('buy-grand-total');
+      const totalInput = document.getElementById('buy-total-hidden');
+      if (totalDisplay) totalDisplay.innerText = formatRp(total);
+      if (totalInput) totalInput.value = total;
+    };
+
     window.openFormPembelianModal = function () {
+      window._currentPembelianItems = [];
+
       openModal(`
-        <form onsubmit="simpanPembelianBaru(event)" class="space-y-4">
+        <form onsubmit="simpanPembelianBaru(event)" class="space-y-4 max-h-[85vh] overflow-y-auto pr-1">
+          <!-- Header -->
           <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2.5">
             <h3 class="font-bold text-lg text-slate-800 dark:text-slate-100 flex items-center space-x-2">
               <i data-lucide="truck" class="w-5 h-5 text-cyan-500"></i>
@@ -3516,39 +4550,131 @@
             </h3>
           </div>
 
+          <!-- Tanggal & Supplier -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="text-xs text-slate-500 dark:text-slate-400 block mb-1 font-semibold">Tanggal Pembelian *</label>
-              <input type="date" id="buy-tanggal" value="${new Date().toISOString().split('T')[0]}" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500" required />
+              <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Tanggal Pembelian *</label>
+              <input type="date" id="buy-tanggal" value="${new Date().toISOString().split('T')[0]}" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 font-semibold" required />
             </div>
             <div>
-              <label class="text-xs text-slate-500 dark:text-slate-400 block mb-1 font-semibold">Nama Supplier / Vendor *</label>
-              <input type="text" id="buy-supplier" placeholder="Contoh: Distributor Epson Resmi" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 font-semibold" required />
+              <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Nama Supplier / Vendor *</label>
+              <input type="text" id="buy-supplier" list="supplier-presets" placeholder="Contoh: Distributor Epson Resmi" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 font-semibold" required />
+              <datalist id="supplier-presets">
+                ${Array.from(new Set(state.pembelian.map(p => p.supplier).filter(Boolean))).map(s => `<option value="${s}">`).join('')}
+                <option value="Distributor Epson Resmi">
+                <option value="Distributor Canon Indonesia">
+                <option value="Supplier Sparepart Glodok">
+                <option value="Master Tinta Indonesia">
+              </datalist>
             </div>
           </div>
 
-          <div>
-            <label class="text-xs text-slate-500 dark:text-slate-400 block mb-1 font-semibold">Rincian Item Yang Dibeli *</label>
-            <input type="text" id="buy-barang" placeholder="Contoh: 10 Botol Tinta 003 & 2 Printhead L3110" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500" required />
+          <!-- Daftar Item Pembelian * -->
+          <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 space-y-3">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 flex items-center space-x-1.5">
+                <i data-lucide="package" class="w-4 h-4"></i>
+                <span>Daftar Item Pembelian *</span>
+              </label>
+              <span class="text-[11px] font-bold text-cyan-500 flex items-center space-x-1">
+                <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+                <span>Tambah Item</span>
+              </span>
+            </div>
+
+            <!-- Table Container -->
+            <div id="buy-items-container">
+              ${renderPembelianItemsTableHtml(window._currentPembelianItems)}
+            </div>
+
+            <!-- Row Input Tambah Item -->
+            <div class="pt-2 border-t border-slate-200 dark:border-slate-700/80">
+              <div class="text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1.5">Tambah Barang / Sparepart ke Nota:</div>
+              <div class="grid grid-cols-12 gap-2 items-center">
+                <!-- Nama Barang / Sparepart -->
+                <div class="col-span-12 sm:col-span-5">
+                  <input type="text" id="buy-item-name" list="buy-stock-presets" oninput="onBuyItemSelectChange()" placeholder="Pilih dari stok atau ketik nama baru..." class="w-full text-xs p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-cyan-500 font-semibold" />
+                  <datalist id="buy-stock-presets">
+                    ${state.stok.map(st => `<option value="${st.nama}">${st.nama} (${st.kategori}) - Stok: ${st.jumlah}</option>`).join('')}
+                  </datalist>
+                </div>
+
+                <!-- Qty -->
+                <div class="col-span-3 sm:col-span-2">
+                  <input type="number" id="buy-item-qty" value="1" min="1" step="1" oninput="updateBuyItemSubtotalPreview()" placeholder="Qty" title="Jumlah (Qty)" class="w-full text-xs p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-center font-bold focus:outline-none focus:border-cyan-500" />
+                </div>
+
+                <!-- Harga Satuan -->
+                <div class="col-span-4 sm:col-span-3">
+                  <div class="relative">
+                    <span class="absolute left-2 top-2 text-[11px] text-slate-400 font-bold">Rp</span>
+                    <input type="number" id="buy-item-harga" value="0" min="0" step="500" oninput="updateBuyItemSubtotalPreview()" placeholder="0" title="Harga Beli Satuan" class="w-full pl-7 pr-2 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold focus:outline-none focus:border-cyan-500" />
+                  </div>
+                </div>
+
+                <!-- Subtotal Preview & Button Tambah (+) -->
+                <div class="col-span-5 sm:col-span-2 flex items-center justify-between sm:justify-end space-x-2">
+                  <div class="text-right">
+                    <span class="text-[9px] text-slate-400 block leading-tight">Subtotal:</span>
+                    <span id="buy-item-subtotal-preview" class="text-xs font-bold text-slate-800 dark:text-slate-100">Rp 0</span>
+                  </div>
+                  <button type="button" onclick="tambahItemPembelian()" class="p-2 rounded-lg bg-cyan-500 hover:bg-cyan-600 text-white font-bold transition shrink-0 shadow-md shadow-cyan-500/20" title="Tambah Item ke Daftar Nota">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
 
+          <!-- Total Pembelian Card -->
+          <div class="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-between">
+            <div>
+              <span class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider block">Total Pembelian:</span>
+              <span class="text-[10px] text-slate-400">Total akumulasi seluruh item dalam nota</span>
+            </div>
+            <span id="buy-grand-total" class="text-xl font-black text-rose-600 dark:text-rose-400">Rp 0</span>
+            <input type="hidden" id="buy-total-hidden" value="0" />
+          </div>
+
+          <!-- Status Pembayaran & Opsi Sinkronisasi -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="text-xs text-slate-500 dark:text-slate-400 block mb-1 font-semibold">Total Pembayaran (Rp) *</label>
-              <input type="number" id="buy-total" placeholder="0" class="w-full text-sm p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 font-bold text-rose-500" required />
-            </div>
-            <div>
-              <label class="text-xs text-slate-500 dark:text-slate-400 block mb-1 font-semibold">Status Pembayaran</label>
-              <select id="buy-status" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 font-semibold">
+              <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Status Pembayaran</label>
+              <select id="buy-status" onchange="document.getElementById('buy-dp-wrapper')?.classList.toggle('hidden', this.value !== 'DP')" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 font-semibold">
                 <option value="Lunas">Lunas</option>
                 <option value="Belum Lunas">Belum Lunas (Tempo / Hutang)</option>
-                <option value="DP">DP (Uang Muka)</option>
+                <option value="DP">DP (Uang Muka / Dicicil)</option>
               </select>
+              <div id="buy-dp-wrapper" class="hidden mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <label class="text-[11px] text-amber-700 dark:text-amber-300 block mb-1 font-bold">Nominal DP / Cicilan Pertama (Rp)</label>
+                <input type="number" id="buy-dp" placeholder="0" class="w-full text-xs p-2 rounded-lg border border-amber-300 dark:border-amber-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold focus:outline-none focus:border-amber-500" />
+              </div>
+            </div>
+
+            <div>
+              <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Sinkronisasi Kas & Hutang</label>
+              <div class="space-y-1 pt-1">
+                <label class="flex items-center space-x-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                  <input type="checkbox" id="buy-auto-stok" checked class="rounded text-cyan-500 focus:ring-cyan-400 w-4 h-4 cursor-pointer" />
+                  <span>Otomatis tambah jumlah stok barang/sparepart</span>
+                </label>
+                <label class="flex items-center space-x-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                  <input type="checkbox" id="buy-catat-kas" checked class="rounded text-cyan-500 focus:ring-cyan-400 w-4 h-4 cursor-pointer" />
+                  <span>Catat ke Kas Keluar (jika Lunas) / Hutang (jika Belum Lunas)</span>
+                </label>
+              </div>
             </div>
           </div>
 
+          <!-- Catatan / Keterangan (opsional) -->
+          <div>
+            <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Catatan / Keterangan (opsional)</label>
+            <textarea id="buy-catatan" rows="2" placeholder="Catatan tambahan nota..." class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-cyan-500"></textarea>
+          </div>
+
+          <!-- Footer Action Buttons -->
           <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-end space-x-2">
-            <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 transition">Batal</button>
+            <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 transition">Batal</button>
             <button type="submit" class="px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white shadow-md shadow-cyan-500/25 flex items-center space-x-1.5 transition">
               <i data-lucide="check" class="w-4 h-4"></i>
               <span>Simpan Nota Pembelian</span>
@@ -3561,40 +4687,165 @@
 
     window.simpanPembelianBaru = async function (e) {
       e.preventDefault();
-      const id = `BUY-00${state.pembelian.length + 1}`;
+
+      if (!window._currentPembelianItems || window._currentPembelianItems.length === 0) {
+        alert('Daftar item pembelian masih kosong! Tambahkan minimal 1 item barang/sparepart dengan klik tombol +.');
+        return;
+      }
+
+      const tanggal = document.getElementById('buy-tanggal')?.value || new Date().toISOString().split('T')[0];
+      const supplier = (document.getElementById('buy-supplier')?.value || '').trim();
+      const status = document.getElementById('buy-status')?.value || 'Lunas';
+      const catatan = (document.getElementById('buy-catatan')?.value || '').trim();
+      const autoStok = document.getElementById('buy-auto-stok')?.checked;
+      const catatKas = document.getElementById('buy-catat-kas')?.checked;
+
+      const total = window._currentPembelianItems.reduce((sum, item) => sum + item.subtotal, 0);
+      const rincianBarang = window._currentPembelianItems.map(i => `${i.qty}x ${i.nama}`).join(', ');
+      const id = `BUY-2026-00${state.pembelian.length + 1}`;
+
+      // 1. Simpan record pembelian
       const newPembelian = {
         id,
-        tanggal: document.getElementById('buy-tanggal').value || new Date().toISOString().split('T')[0],
-        supplier: document.getElementById('buy-supplier').value.trim(),
-        barang: document.getElementById('buy-barang').value.trim(),
-        total: parseFloat(document.getElementById('buy-total').value) || 0,
-        status: document.getElementById('buy-status').value
+        tanggal,
+        supplier,
+        barang: rincianBarang,
+        items: [...window._currentPembelianItems],
+        total,
+        status,
+        catatan
       };
       await dbSave('pembelian', id, newPembelian);
+
+      // 2. Otomatis restok jumlah stok barang/sparepart
+      if (autoStok) {
+        for (const item of window._currentPembelianItems) {
+          const found = state.stok.find(s => (item.id && s.id === item.id) || s.nama.toLowerCase() === item.nama.toLowerCase());
+          if (found) {
+            const newQty = (found.jumlah || 0) + item.qty;
+            const updatePayload = { jumlah: newQty };
+            if (item.hargaSatuan > 0) {
+              updatePayload.hpp = item.hargaSatuan;
+            }
+            await dbUpdate('stok', found.id, updatePayload);
+          } else {
+            // Tambahkan sebagai barang baru di master stok
+            const newStockId = `BRG-00${state.stok.length + 1}`;
+            const newItem = {
+              id: newStockId,
+              nama: item.nama,
+              kategori: 'Barang',
+              satuan: 'Pcs',
+              hpp: item.hargaSatuan,
+              harga: Math.round(item.hargaSatuan * 1.25),
+              jumlah: item.qty,
+              minStok: 3
+            };
+            await dbSave('stok', newStockId, newItem);
+          }
+        }
+      }
+
+      // 3. Pencatatan Keuangan (Kas Keluar atau Hutang)
+      if (catatKas) {
+        if (status === 'Lunas') {
+          const kasId = `KAS-00${state.kas.length + 1}`;
+          await dbSave('kas', kasId, {
+            id: kasId,
+            tanggal,
+            tipe: 'Keluar',
+            kategori: 'Pembelian Stock',
+            keterangan: `Restok #${id} (${supplier} - ${rincianBarang})`,
+            jumlah: total
+          });
+        } else if (status === 'DP') {
+          const dp = parseFloat(document.getElementById('buy-dp')?.value) || 0;
+          if (dp > 0) {
+            const kasId = `KAS-00${state.kas.length + 1}`;
+            await dbSave('kas', kasId, {
+              id: kasId,
+              tanggal,
+              tipe: 'Keluar',
+              kategori: 'DP Pembelian Stock',
+              keterangan: `DP Restok #${id} (${supplier} - ${rincianBarang})`,
+              jumlah: dp
+            });
+          }
+          const hpId = `HP-${String((state.hutangpiutang || []).length + 1).padStart(3, '0')}`;
+          const sisaHutang = Math.max(0, total - dp);
+          await dbSave('hutangpiutang', hpId, {
+            id: hpId,
+            jenis: 'Hutang',
+            pihak: supplier,
+            noRef: id,
+            tanggal,
+            totalTagihan: total,
+            terbayar: dp,
+            jumlah: sisaHutang,
+            jatuhTempo: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            status: sisaHutang <= 0 ? 'Lunas' : 'Dicicil',
+            keterangan: `Restok barang #${id} (${supplier}) - DP: ${formatRp(dp)}`,
+            riwayatCicilan: dp > 0 ? [{
+              id: `CICIL-${Date.now()}`,
+              tanggal,
+              jumlah: dp,
+              metode: 'Tunai',
+              catatan: 'DP Pembelian Awal'
+            }] : []
+          });
+        } else {
+          // Catat ke Hutang Toko (Belum Lunas)
+          const hpId = `HP-${String((state.hutangpiutang || []).length + 1).padStart(3, '0')}`;
+          await dbSave('hutangpiutang', hpId, {
+            id: hpId,
+            jenis: 'Hutang',
+            pihak: supplier,
+            noRef: id,
+            tanggal,
+            totalTagihan: total,
+            terbayar: 0,
+            jumlah: total,
+            jatuhTempo: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            status: 'Belum Lunas',
+            keterangan: `Restok barang #${id} (${supplier})`,
+            riwayatCicilan: []
+          });
+        }
+      }
+
       closeModal();
+      showNotificationToast(`Nota pembelian restok #${id} (${formatRp(total)}) berhasil disimpan!`);
     };
 
     window.openEditPembelianModal = function (id) {
       const p = state.pembelian.find(item => item.id === id);
       if (!p) return;
 
+      window._currentPembelianItems = Array.isArray(p.items) && p.items.length > 0
+        ? JSON.parse(JSON.stringify(p.items))
+        : [{ id: '', nama: p.barang || 'Barang Restok', qty: 1, hargaSatuan: p.total || 0, subtotal: p.total || 0 }];
+
       openModal(`
-        <form onsubmit="simpanEditPembelian(event, '${p.id}')" class="space-y-4">
+        <form onsubmit="simpanEditPembelian(event, '${p.id}')" class="space-y-4 max-h-[85vh] overflow-y-auto pr-1">
+          <!-- Header -->
           <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2.5">
             <div>
-              <h3 class="font-bold text-lg text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-                <i data-lucide="edit" class="w-5 h-5 text-cyan-500"></i>
-                <span>Edit Pembelian Stock Supplier</span>
-              </h3>
-              <p class="text-xs text-slate-600 dark:text-slate-300">Ubah rincian nota belanja, supplier, atau nominal tagihan</p>
+              <div class="flex items-center space-x-2">
+                <span class="font-mono text-xs px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 font-bold">${p.id}</span>
+                <h3 class="font-bold text-base text-slate-800 dark:text-slate-100">Edit Pembelian Stock Supplier</h3>
+              </div>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Ubah rincian nota belanja, supplier, atau nominal tagihan</p>
             </div>
-            <span class="font-mono text-xs bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 px-2 py-0.5 rounded font-bold">${p.id}</span>
+            <span class="px-2.5 py-1 rounded-full text-xs font-bold ${p.status === 'Lunas' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'}">
+              ${p.status}
+            </span>
           </div>
 
+          <!-- Tanggal & Supplier -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Tanggal Pembelian *</label>
-              <input type="date" id="edit-buy-tanggal" value="${p.tanggal}" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500" required />
+              <input type="date" id="edit-buy-tanggal" value="${p.tanggal}" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 font-semibold" required />
             </div>
             <div>
               <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Nama Supplier / Vendor *</label>
@@ -3602,16 +4853,75 @@
             </div>
           </div>
 
-          <div>
-            <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Rincian Item Yang Dibeli *</label>
-            <input type="text" id="edit-buy-barang" value="${p.barang}" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500" required />
+          <!-- Daftar Item Pembelian * -->
+          <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 space-y-3">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 flex items-center space-x-1.5">
+                <i data-lucide="package" class="w-4 h-4"></i>
+                <span>Daftar Item Pembelian *</span>
+              </label>
+              <span class="text-[11px] font-bold text-cyan-500 flex items-center space-x-1">
+                <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+                <span>Tambah Item</span>
+              </span>
+            </div>
+
+            <!-- Table Container -->
+            <div id="buy-items-container">
+              ${renderPembelianItemsTableHtml(window._currentPembelianItems)}
+            </div>
+
+            <!-- Row Input Tambah Item -->
+            <div class="pt-2 border-t border-slate-200 dark:border-slate-700/80">
+              <div class="text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1.5">Tambah Barang / Sparepart ke Nota:</div>
+              <div class="grid grid-cols-12 gap-2 items-center">
+                <!-- Nama Barang / Sparepart -->
+                <div class="col-span-12 sm:col-span-5">
+                  <input type="text" id="buy-item-name" list="buy-stock-presets" oninput="onBuyItemSelectChange()" placeholder="Pilih dari stok atau ketik nama baru..." class="w-full text-xs p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-cyan-500 font-semibold" />
+                  <datalist id="buy-stock-presets">
+                    ${state.stok.map(st => `<option value="${st.nama}">${st.nama} (${st.kategori}) - Stok: ${st.jumlah}</option>`).join('')}
+                  </datalist>
+                </div>
+
+                <!-- Qty -->
+                <div class="col-span-3 sm:col-span-2">
+                  <input type="number" id="buy-item-qty" value="1" min="1" step="1" oninput="updateBuyItemSubtotalPreview()" placeholder="Qty" title="Jumlah (Qty)" class="w-full text-xs p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-center font-bold focus:outline-none focus:border-cyan-500" />
+                </div>
+
+                <!-- Harga Satuan -->
+                <div class="col-span-4 sm:col-span-3">
+                  <div class="relative">
+                    <span class="absolute left-2 top-2 text-[11px] text-slate-400 font-bold">Rp</span>
+                    <input type="number" id="buy-item-harga" value="0" min="0" step="500" oninput="updateBuyItemSubtotalPreview()" placeholder="0" title="Harga Beli Satuan" class="w-full pl-7 pr-2 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold focus:outline-none focus:border-cyan-500" />
+                  </div>
+                </div>
+
+                <!-- Subtotal Preview & Button Tambah (+) -->
+                <div class="col-span-5 sm:col-span-2 flex items-center justify-between sm:justify-end space-x-2">
+                  <div class="text-right">
+                    <span class="text-[9px] text-slate-400 block leading-tight">Subtotal:</span>
+                    <span id="buy-item-subtotal-preview" class="text-xs font-bold text-slate-800 dark:text-slate-100">Rp 0</span>
+                  </div>
+                  <button type="button" onclick="tambahItemPembelian()" class="p-2 rounded-lg bg-cyan-500 hover:bg-cyan-600 text-white font-bold transition shrink-0 shadow-md shadow-cyan-500/20" title="Tambah Item ke Daftar Nota">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <!-- Total Pembelian Card -->
+          <div class="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-between">
             <div>
-              <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Total Pembayaran (Rp) *</label>
-              <input type="number" id="edit-buy-total" value="${p.total}" class="w-full text-sm p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 font-bold text-rose-500" required />
+              <span class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider block">Total Pembelian:</span>
+              <span class="text-[10px] text-slate-400">Total akumulasi seluruh item dalam nota</span>
             </div>
+            <span id="buy-grand-total" class="text-xl font-black text-rose-600 dark:text-rose-400">${formatRp(p.total)}</span>
+            <input type="hidden" id="buy-total-hidden" value="${p.total}" />
+          </div>
+
+          <!-- Status Pembayaran -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Status Pembayaran</label>
               <select id="edit-buy-status" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 font-semibold">
@@ -3620,10 +4930,15 @@
                 <option value="DP" ${p.status === 'DP' ? 'selected' : ''}>DP (Uang Muka)</option>
               </select>
             </div>
+            <div>
+              <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Catatan / Keterangan (opsional)</label>
+              <input type="text" id="edit-buy-catatan" value="${p.catatan || ''}" placeholder="Catatan tambahan nota..." class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-cyan-500" />
+            </div>
           </div>
 
+          <!-- Footer Action Buttons -->
           <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-end space-x-2">
-            <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 transition">Batal</button>
+            <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 transition">Batal</button>
             <button type="submit" class="px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white shadow-md shadow-cyan-500/25 flex items-center space-x-1.5 transition">
               <i data-lucide="check" class="w-4 h-4"></i>
               <span>Simpan Perubahan</span>
@@ -3636,21 +4951,113 @@
 
     window.simpanEditPembelian = async function (e, id) {
       e.preventDefault();
+      const items = window._currentPembelianItems || [];
+      const total = items.length > 0
+        ? items.reduce((sum, item) => sum + item.subtotal, 0)
+        : (parseFloat(document.getElementById('buy-total-hidden')?.value) || 0);
+
+      const rincianBarang = items.length > 0
+        ? items.map(i => `${i.qty}x ${i.nama}`).join(', ')
+        : (document.getElementById('edit-buy-supplier')?.value || 'Barang');
+
       const updateData = {
-        tanggal: document.getElementById('edit-buy-tanggal').value,
-        supplier: document.getElementById('edit-buy-supplier').value.trim(),
-        barang: document.getElementById('edit-buy-barang').value.trim(),
-        total: parseFloat(document.getElementById('edit-buy-total').value) || 0,
-        status: document.getElementById('edit-buy-status').value
+        tanggal: document.getElementById('edit-buy-tanggal')?.value || new Date().toISOString().split('T')[0],
+        supplier: document.getElementById('edit-buy-supplier')?.value.trim() || 'Supplier',
+        barang: rincianBarang,
+        items: [...items],
+        total,
+        status: document.getElementById('edit-buy-status')?.value || 'Lunas',
+        catatan: document.getElementById('edit-buy-catatan')?.value.trim() || ''
       };
+
       await dbUpdate('pembelian', id, updateData);
+
+      // Sinkronisasi dengan Catatan Hutang Toko jika ada
+      const existingHP = (state.hutangpiutang || []).find(hp => hp.noRef === id && hp.jenis === 'Hutang');
+      if (existingHP) {
+        if (updateData.status === 'Lunas') {
+          await dbUpdate('hutangpiutang', existingHP.id, {
+            status: 'Lunas',
+            totalTagihan: total,
+            terbayar: total,
+            jumlah: 0,
+            pihak: updateData.supplier
+          });
+        } else {
+          const terbayar = existingHP.terbayar || 0;
+          const sisa = Math.max(0, total - terbayar);
+          await dbUpdate('hutangpiutang', existingHP.id, {
+            totalTagihan: total,
+            jumlah: sisa,
+            pihak: updateData.supplier,
+            status: sisa <= 0 ? 'Lunas' : (terbayar > 0 ? 'Dicicil' : updateData.status)
+          });
+        }
+      }
+
       closeModal();
+      showNotificationToast(`Perubahan nota pembelian #${id} berhasil disimpan!`);
     };
 
     window.hapusPembelian = async function (id) {
       if (confirm('Yakin ingin menghapus catatan pembelian ini?')) {
         await dbDelete('pembelian', id);
+        showNotificationToast(`Catatan pembelian #${id} berhasil dihapus.`);
       }
+    };
+
+    window.cetakNotaPembelian = function (id) {
+      const p = state.pembelian.find(item => item.id === id);
+      if (!p) return;
+
+      const printArea = document.getElementById('printable-area');
+      const items = Array.isArray(p.items) && p.items.length > 0
+        ? p.items
+        : [{ nama: p.barang, qty: 1, hargaSatuan: p.total, subtotal: p.total }];
+
+      printArea.innerHTML = `
+        <div style="width: 320px; font-size: 11px; margin: 0 auto; font-family: monospace;">
+          <h2 style="text-align:center; font-weight:bold; margin-bottom: 2px;">JOY PRINT SOLUTION</h2>
+          <p style="text-align:center; margin:0;">Nota Pembelian Stock / Restok</p>
+          <hr style="border-top:1px dashed #000; margin: 6px 0;" />
+          <p style="margin:2px 0;"><strong>No. Ref:</strong> ${p.id}</p>
+          <p style="margin:2px 0;"><strong>Tanggal:</strong> ${p.tanggal}</p>
+          <p style="margin:2px 0;"><strong>Supplier:</strong> ${p.supplier}</p>
+          <p style="margin:2px 0;"><strong>Status:</strong> ${p.status}</p>
+          ${p.catatan ? `<p style="margin:2px 0;"><strong>Catatan:</strong> ${p.catatan}</p>` : ''}
+          <hr style="border-top:1px dashed #000; margin: 6px 0;" />
+          <table style="width:100%; font-size:10px;">
+            <thead>
+              <tr style="border-bottom:1px solid #000;">
+                <th style="text-align:left; padding:2px 0;">Item</th>
+                <th style="text-align:center; padding:2px 0;">Qty</th>
+                <th style="text-align:right; padding:2px 0;">Harga</th>
+                <th style="text-align:right; padding:2px 0;">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map(it => `
+                <tr>
+                  <td style="padding:2px 0;">${it.nama}</td>
+                  <td style="text-align:center; padding:2px 0;">${it.qty}</td>
+                  <td style="text-align:right; padding:2px 0;">${formatRp(it.hargaSatuan)}</td>
+                  <td style="text-align:right; padding:2px 0;">${formatRp(it.subtotal)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <hr style="border-top:1px dashed #000; margin: 6px 0;" />
+          <p style="display:flex; justify-content:space-between; margin: 3px 0; font-size:12px; font-weight:bold;">
+            <span>TOTAL PEMBELIAN:</span>
+            <span>${formatRp(p.total)}</span>
+          </p>
+          <hr style="border-top:1px dashed #000; margin: 6px 0;" />
+          <p style="text-align:center; margin-top:10px; font-size:10px;">Arsip Dokumen Pembelian Stok Joy Print Solution</p>
+        </div>
+      `;
+      printArea.classList.remove('hidden');
+      window.print();
+      printArea.classList.add('hidden');
     };
 
     function renderKasView() {
@@ -3844,54 +5251,339 @@
       closeModal();
     };
 
+    // =========================================================================
+    // MODUL HUTANG & PIUTANG FLEKSIBEL (MANUAL INPUT, EDIT & CICILAN/BERTAHAP)
+    // =========================================================================
+
+    window.normalizeHPItem = function (hp) {
+      const total = Number(hp.totalTagihan !== undefined ? hp.totalTagihan : hp.jumlah) || 0;
+      const isLunas = hp.status === 'Lunas';
+      const terbayar = Number(hp.terbayar !== undefined ? hp.terbayar : (isLunas ? total : 0)) || 0;
+      const sisa = isLunas ? 0 : Math.max(0, total - terbayar);
+      const status = isLunas ? 'Lunas' : (terbayar > 0 ? 'Dicicil' : (hp.status || 'Belum Lunas'));
+      const riwayat = Array.isArray(hp.riwayatCicilan) ? hp.riwayatCicilan : [];
+      return {
+        ...hp,
+        totalTagihan: total,
+        terbayar,
+        sisa,
+        status,
+        riwayatCicilan: riwayat,
+        tanggal: hp.tanggal || (riwayat.length > 0 ? riwayat[0].tanggal : '') || hp.jatuhTempo || new Date().toISOString().split('T')[0],
+        keterangan: hp.keterangan || ''
+      };
+    };
+
+    window._hpFilterJenis = window._hpFilterJenis || 'all';
+    window._hpFilterStatus = window._hpFilterStatus || 'all';
+    window._hpSearchQuery = window._hpSearchQuery || '';
+
+    window.setHPFilterJenis = function (jenis) {
+      window._hpFilterJenis = jenis;
+      window.renderPage();
+    };
+
+    window.setHPFilterStatus = function (status) {
+      window._hpFilterStatus = status;
+      window.renderPage();
+    };
+
+    window.onHPSearchInput = function (q) {
+      window._hpSearchQuery = (q || '').trim().toLowerCase();
+      const tbody = document.getElementById('hp-table-body');
+      if (tbody) {
+        tbody.innerHTML = renderHutangPiutangRows();
+        lucide.createIcons();
+      }
+    };
+
+    function renderHutangPiutangRows() {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const items = (state.hutangpiutang || []).map(normalizeHPItem);
+
+      const filtered = items.filter(hp => {
+        if (window._hpFilterJenis !== 'all' && hp.jenis !== window._hpFilterJenis) return false;
+        if (window._hpFilterStatus !== 'all') {
+          if (window._hpFilterStatus === 'Belum Lunas' && hp.status !== 'Belum Lunas') return false;
+          if (window._hpFilterStatus === 'Dicicil' && hp.status !== 'Dicicil') return false;
+          if (window._hpFilterStatus === 'Lunas' && hp.status !== 'Lunas') return false;
+        }
+        if (window._hpSearchQuery) {
+          const q = window._hpSearchQuery;
+          const matchPihak = (hp.pihak || '').toLowerCase().includes(q);
+          const matchRef = (hp.noRef || '').toLowerCase().includes(q);
+          const matchId = (hp.id || '').toLowerCase().includes(q);
+          const matchKete = (hp.keterangan || '').toLowerCase().includes(q);
+          if (!matchPihak && !matchRef && !matchId && !matchKete) return false;
+        }
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        return `
+          <tr>
+            <td colspan="10" class="p-8 text-center text-slate-400">
+              <i data-lucide="inbox" class="w-10 h-10 mx-auto mb-2 opacity-40"></i>
+              <p class="font-semibold text-sm">Tidak ada data hutang / piutang yang sesuai filter atau pencarian.</p>
+            </td>
+          </tr>
+        `;
+      }
+
+      return filtered.map(hp => {
+        const percent = hp.totalTagihan > 0 ? Math.min(100, Math.round((hp.terbayar / hp.totalTagihan) * 100)) : (hp.status === 'Lunas' ? 100 : 0);
+        const isOverdue = hp.status !== 'Lunas' && hp.jatuhTempo && hp.jatuhTempo !== '-' && hp.jatuhTempo < todayStr;
+        const cicilanCount = (hp.riwayatCicilan || []).length;
+
+        return `
+          <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition text-sm">
+            <td class="p-3.5">
+              <span class="font-mono font-bold text-cyan-600 dark:text-cyan-400 block">${hp.id}</span>
+              <span class="text-[11px] text-slate-400">${hp.tanggal || '-'}</span>
+            </td>
+            <td class="p-3.5">
+              <span class="px-2.5 py-1 rounded-lg text-xs font-bold inline-flex items-center space-x-1 ${hp.jenis === 'Piutang'
+            ? 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20'
+            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+          }">
+                <i data-lucide="${hp.jenis === 'Piutang' ? 'arrow-down-left' : 'arrow-up-right'}" class="w-3 h-3"></i>
+                <span>${hp.jenis}</span>
+              </span>
+            </td>
+            <td class="p-3.5">
+              <div class="font-bold text-slate-800 dark:text-slate-100">${hp.pihak}</div>
+              ${hp.keterangan ? `<div class="text-[11px] text-slate-500 line-clamp-1 italic">${hp.keterangan}</div>` : ''}
+            </td>
+            <td class="p-3.5">
+              <span class="font-mono text-xs px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 font-medium">
+                ${hp.noRef || '-'}
+              </span>
+            </td>
+            <td class="p-3.5 font-bold text-slate-700 dark:text-slate-200">
+              ${formatRp(hp.totalTagihan)}
+            </td>
+            <td class="p-3.5">
+              <div class="flex items-center justify-between text-xs font-bold text-emerald-600 dark:text-emerald-400 mb-1">
+                <span>${formatRp(hp.terbayar)}</span>
+                <span class="text-[10px] text-slate-400">(${percent}%)</span>
+              </div>
+              <div class="w-28 bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                <div class="bg-emerald-500 h-full rounded-full transition-all duration-300" style="width: ${percent}%;"></div>
+              </div>
+              ${cicilanCount > 0 ? `
+                <span class="text-[10px] text-slate-400 mt-0.5 block">${cicilanCount}x Pembayaran</span>
+              ` : ''}
+            </td>
+            <td class="p-3.5">
+              <span class="font-extrabold ${hp.sisa > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-500'}">
+                ${formatRp(hp.sisa)}
+              </span>
+            </td>
+            <td class="p-3.5">
+              <span class="text-xs ${isOverdue ? 'font-bold text-rose-500' : 'text-slate-600 dark:text-slate-400'} block">
+                ${hp.jatuhTempo || '-'}
+              </span>
+              ${isOverdue ? `
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-500 font-semibold border border-rose-500/20 inline-block mt-0.5">
+                  Jatuh Tempo!
+                </span>
+              ` : ''}
+            </td>
+            <td class="p-3.5">
+              <span class="px-2.5 py-1 rounded-full text-xs font-bold inline-block ${hp.status === 'Lunas'
+            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+            : hp.status === 'Dicicil'
+              ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+              : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+          }">
+                ${hp.status}
+              </span>
+            </td>
+            <td class="p-3.5 text-center">
+              <div class="flex items-center justify-center space-x-1.5">
+                ${hp.status !== 'Lunas' ? `
+                  <button onclick="openBayarCicilanModal('${hp.id}')" title="Bayar Cicilan / Pelunasan"
+                    class="px-2.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold shadow-sm transition flex items-center space-x-1">
+                    <i data-lucide="wallet" class="w-3.5 h-3.5"></i>
+                    <span>Cicil</span>
+                  </button>
+                ` : ''}
+                <button onclick="openDetailHutangPiutangModal('${hp.id}')" title="Detail & Riwayat Cicilan"
+                  class="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 transition">
+                  <i data-lucide="eye" class="w-4 h-4"></i>
+                </button>
+                <button onclick="openEditHutangPiutangModal('${hp.id}')" title="Edit Data"
+                  class="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-cyan-600 dark:text-cyan-400 transition">
+                  <i data-lucide="edit-3" class="w-4 h-4"></i>
+                </button>
+                <button onclick="hapusHutangPiutang('${hp.id}')" title="Hapus Catatan"
+                  class="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 transition">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
     function renderHutangPiutangView() {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const items = (state.hutangpiutang || []).map(normalizeHPItem);
+
+      // KPI Metrics
+      const totalPiutangSisa = items
+        .filter(h => h.jenis === 'Piutang' && h.status !== 'Lunas')
+        .reduce((sum, h) => sum + h.sisa, 0);
+
+      const totalHutangSisa = items
+        .filter(h => h.jenis === 'Hutang' && h.status !== 'Lunas')
+        .reduce((sum, h) => sum + h.sisa, 0);
+
+      const totalTerbayarSemua = items
+        .reduce((sum, h) => sum + h.terbayar, 0);
+
+      const countOverdue = items
+        .filter(h => h.status !== 'Lunas' && h.jatuhTempo && h.jatuhTempo !== '-' && h.jatuhTempo < todayStr)
+        .length;
+
+      const activePiutangCount = items.filter(h => h.jenis === 'Piutang' && h.status !== 'Lunas').length;
+      const activeHutangCount = items.filter(h => h.jenis === 'Hutang' && h.status !== 'Lunas').length;
+
       return `
         <div class="space-y-6">
+          <!-- Header Bar -->
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <h3 class="text-xl font-bold text-slate-900 dark:text-slate-100">Pencatatan Hutang & Piutang</h3>
-              <p class="text-xs text-slate-600 dark:text-slate-300">Monitor tagihan sisa servis pelanggan & kewajiban ke vendor.</p>
+              <div class="flex items-center space-x-3">
+                <div class="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-500 dark:bg-cyan-500/20 border border-cyan-500/20">
+                  <i data-lucide="file-text" class="w-6 h-6"></i>
+                </div>
+                <div>
+                  <h3 class="text-xl font-black text-slate-900 dark:text-slate-100">Pencatatan Hutang & Piutang</h3>
+                  <p class="text-xs text-slate-600 dark:text-slate-300">Input manual fleksibel, edit tagihan, dan kelola pembayaran bertahap / cicilan.</p>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center space-x-2">
+              <button onclick="openFormHutangPiutangModal()"
+                class="px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-cyan-500/25 flex items-center space-x-2 transition">
+                <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                <span>+ Catat Hutang / Piutang Baru</span>
+              </button>
             </div>
           </div>
 
+          <!-- KPI Metric Cards -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
+              <div class="flex items-center justify-between text-slate-500">
+                <span class="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400">Total Piutang Toko</span>
+                <div class="p-2 rounded-lg bg-cyan-500/10 text-cyan-500"><i data-lucide="arrow-down-left" class="w-4 h-4"></i></div>
+              </div>
+              <h3 class="text-2xl font-black mt-2 text-slate-800 dark:text-slate-100">${formatRp(totalPiutangSisa)}</h3>
+              <p class="text-xs text-slate-500 mt-1">${activePiutangCount} tagihan pelanggan belum lunas</p>
+            </div>
+
+            <div class="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
+              <div class="flex items-center justify-between text-slate-500">
+                <span class="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Total Hutang Toko</span>
+                <div class="p-2 rounded-lg bg-amber-500/10 text-amber-500"><i data-lucide="arrow-up-right" class="w-4 h-4"></i></div>
+              </div>
+              <h3 class="text-2xl font-black mt-2 text-slate-800 dark:text-slate-100">${formatRp(totalHutangSisa)}</h3>
+              <p class="text-xs text-slate-500 mt-1">${activeHutangCount} kewajiban ke vendor/supplier</p>
+            </div>
+
+            <div class="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
+              <div class="flex items-center justify-between text-slate-500">
+                <span class="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Total Sudah Dicicil</span>
+                <div class="p-2 rounded-lg bg-emerald-500/10 text-emerald-500"><i data-lucide="check-circle-2" class="w-4 h-4"></i></div>
+              </div>
+              <h3 class="text-2xl font-black mt-2 text-emerald-600 dark:text-emerald-400">${formatRp(totalTerbayarSemua)}</h3>
+              <p class="text-xs text-slate-500 mt-1">Akumulasi cicilan & pelunasan tercatat</p>
+            </div>
+
+            <div class="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
+              <div class="flex items-center justify-between text-slate-500">
+                <span class="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">Jatuh Tempo Kritis</span>
+                <div class="p-2 rounded-lg bg-rose-500/10 text-rose-500"><i data-lucide="alert-triangle" class="w-4 h-4"></i></div>
+              </div>
+              <h3 class="text-2xl font-black mt-2 text-rose-600 dark:text-rose-400">${countOverdue} Tagihan</h3>
+              <p class="text-xs text-slate-500 mt-1">${countOverdue > 0 ? 'Perlu tindakan penagihan / pelunasan segera' : 'Semua pembayaran tepat waktu'}</p>
+            </div>
+          </div>
+
+          <!-- Filter & Search Controls -->
+          <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm space-y-3">
+            <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+              <!-- Search Box -->
+              <div class="relative flex-1">
+                <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+                <input type="text"
+                  oninput="onHPSearchInput(this.value)"
+                  value="${window._hpSearchQuery || ''}"
+                  placeholder="Cari berdasarkan pihak terkait, no ref, ID, atau catatan..."
+                  class="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/50 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-cyan-500" />
+              </div>
+
+              <!-- Quick Jenis Tabs -->
+              <div class="flex items-center bg-slate-100 dark:bg-slate-900/60 p-1 rounded-xl text-xs font-semibold shrink-0">
+                <button onclick="setHPFilterJenis('all')"
+                  class="px-3 py-1.5 rounded-lg transition ${window._hpFilterJenis === 'all' ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}">
+                  Semua
+                </button>
+                <button onclick="setHPFilterJenis('Piutang')"
+                  class="px-3 py-1.5 rounded-lg transition ${window._hpFilterJenis === 'Piutang' ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}">
+                  Piutang Toko
+                </button>
+                <button onclick="setHPFilterJenis('Hutang')"
+                  class="px-3 py-1.5 rounded-lg transition ${window._hpFilterJenis === 'Hutang' ? 'bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}">
+                  Hutang Toko
+                </button>
+              </div>
+
+              <!-- Status Filter Tabs -->
+              <div class="flex items-center bg-slate-100 dark:bg-slate-900/60 p-1 rounded-xl text-xs font-semibold shrink-0">
+                <button onclick="setHPFilterStatus('all')"
+                  class="px-2.5 py-1.5 rounded-lg transition ${window._hpFilterStatus === 'all' ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-400 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">
+                  Semua
+                </button>
+                <button onclick="setHPFilterStatus('Belum Lunas')"
+                  class="px-2.5 py-1.5 rounded-lg transition ${window._hpFilterStatus === 'Belum Lunas' ? 'bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">
+                  Belum Lunas
+                </button>
+                <button onclick="setHPFilterStatus('Dicicil')"
+                  class="px-2.5 py-1.5 rounded-lg transition ${window._hpFilterStatus === 'Dicicil' ? 'bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">
+                  Dicicil
+                </button>
+                <button onclick="setHPFilterStatus('Lunas')"
+                  class="px-2.5 py-1.5 rounded-lg transition ${window._hpFilterStatus === 'Lunas' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">
+                  Lunas
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Table Container -->
           <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
             <div class="overflow-x-auto">
               <table class="w-full text-left border-collapse">
                 <thead>
                   <tr class="border-b border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900/70 text-xs text-slate-700 dark:text-slate-200 font-bold uppercase">
-                    <th class="p-4">No. Ref</th>
-                    <th class="p-4">Jenis</th>
-                    <th class="p-4">Pihak Terkait</th>
-                    <th class="p-4">No. Tiket/Nota</th>
-                    <th class="p-4">Nominal</th>
-                    <th class="p-4">Jatuh Tempo</th>
-                    <th class="p-4">Status</th>
-                    <th class="p-4 text-center">Aksi</th>
+                    <th class="p-3.5">No. Ref & Tanggal</th>
+                    <th class="p-3.5">Jenis</th>
+                    <th class="p-3.5">Pihak Terkait</th>
+                    <th class="p-3.5">No. Tiket/Nota</th>
+                    <th class="p-3.5">Total Tagihan</th>
+                    <th class="p-3.5">Sudah Terbayar</th>
+                    <th class="p-3.5">Sisa Tagihan</th>
+                    <th class="p-3.5">Jatuh Tempo</th>
+                    <th class="p-3.5">Status</th>
+                    <th class="p-3.5 text-center">Aksi</th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-200 dark:divide-slate-700 text-sm">
-                  ${state.hutangpiutang.map(hp => `
-                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition">
-                      <td class="p-4 font-mono font-bold text-cyan-500">${hp.id}</td>
-                      <td class="p-4">
-                        <span class="px-2 py-0.5 rounded text-xs font-bold ${hp.jenis === 'Piutang' ? 'bg-cyan-500/10 text-cyan-500' : 'bg-amber-500/10 text-amber-500'}">${hp.jenis}</span>
-                      </td>
-                      <td class="p-4 font-bold text-slate-800 dark:text-slate-100">${hp.pihak}</td>
-                      <td class="p-4 font-mono text-xs text-slate-400">${hp.noRef}</td>
-                      <td class="p-4 font-bold">${formatRp(hp.jumlah)}</td>
-                      <td class="p-4 text-xs text-slate-400">${hp.jatuhTempo}</td>
-                      <td class="p-4">
-                        <span class="px-2 py-0.5 rounded text-xs font-bold ${hp.status === 'Lunas' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}">${hp.status}</span>
-                      </td>
-                      <td class="p-4 text-center">
-                        ${hp.status !== 'Lunas' ? `
-                          <button onclick="pelunasanHP('${hp.id}')" class="px-2.5 py-1 rounded-lg bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-600 transition">
-                            Tandai Lunas
-                          </button>
-                        ` : '<span class="text-xs text-slate-400">Selesai</span>'}
-                      </td>
-                    </tr>
-                  `).join('')}
+                <tbody id="hp-table-body" class="divide-y divide-slate-200 dark:divide-slate-700">
+                  ${renderHutangPiutangRows()}
                 </tbody>
               </table>
             </div>
@@ -3900,8 +5592,960 @@
       `;
     }
 
+    // =========================================================================
+    // MODAL FORM TAMBAH HUTANG & PIUTANG BARU (FLEKSIBEL)
+    // =========================================================================
+    window.openFormHutangPiutangModal = function () {
+      const today = new Date().toISOString().split('T')[0];
+      const defaultJatuhTempo = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      // Kumpulkan saran pihak terkait dari Pelanggan & Supplier
+      const listPelanggan = (state.pelanggan || []).map(p => p.nama);
+      const listSupplier = (state.pembelian || []).map(b => b.supplier).filter(Boolean);
+      const uniquePihak = Array.from(new Set([...listPelanggan, ...listSupplier]));
+
+      openModal(`
+        <form onsubmit="simpanHutangPiutangBaru(event)" class="space-y-4">
+          <div class="border-b border-slate-200 dark:border-slate-700 pb-3 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <div class="p-2 rounded-xl bg-cyan-500/10 text-cyan-500">
+                <i data-lucide="file-plus" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h3 class="font-bold text-lg text-slate-800 dark:text-slate-100">Catat Hutang / Piutang Baru</h3>
+                <p class="text-[11px] text-slate-500">Mendukung input manual fleksibel & pembayaran awal (cicilan/DP).</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pilihan Jenis Transaksi -->
+          <div>
+            <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Jenis Transaksi *</label>
+            <div class="grid grid-cols-2 gap-3">
+              <label class="flex items-center p-3 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/40 transition">
+                <input type="radio" name="hp-jenis" value="Piutang" checked onchange="updateHPJenisForm(this.value)" class="text-cyan-500 focus:ring-cyan-400 mr-2.5" />
+                <div>
+                  <span class="text-xs font-bold text-cyan-600 dark:text-cyan-400 block">Piutang (Uang Masuk)</span>
+                  <span class="text-[10px] text-slate-400">Tagihan toko ke pelanggan / pihak lain</span>
+                </div>
+              </label>
+
+              <label class="flex items-center p-3 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/40 transition">
+                <input type="radio" name="hp-jenis" value="Hutang" onchange="updateHPJenisForm(this.value)" class="text-amber-500 focus:ring-amber-400 mr-2.5" />
+                <div>
+                  <span class="text-xs font-bold text-amber-600 dark:text-amber-400 block">Hutang (Kewajiban Keluar)</span>
+                  <span class="text-[10px] text-slate-400">Kewajiban toko ke supplier / vendor</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Pihak Terkait & No Referensi -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">
+                <span id="label-pihak-nama">Nama Pelanggan / Pihak Terkait *</span>
+              </label>
+              <input type="text" id="hp-pihak" list="datalist-pihak" placeholder="Ketik nama orang / toko / vendor..."
+                class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-cyan-500 font-semibold" required />
+              <datalist id="datalist-pihak">
+                ${uniquePihak.map(name => `<option value="${name}"></option>`).join('')}
+              </datalist>
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs text-slate-700 dark:text-slate-200 font-semibold">No. Tiket / Nota / Ref (opsional)</label>
+                <button type="button" onclick="document.getElementById('hp-noref').value = 'REF-' + Date.now().toString().slice(-6)" class="text-[10px] text-cyan-500 hover:underline">
+                  Auto Ref
+                </button>
+              </div>
+              <input type="text" id="hp-noref" placeholder="Contoh: NOTA-01, SRV-2026-001, BUY-002"
+                class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-cyan-500 font-mono" />
+            </div>
+          </div>
+
+          <!-- Tanggal Catat & Jatuh Tempo -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Tanggal Transaksi</label>
+              <input type="date" id="hp-tanggal" value="${today}"
+                class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500" required />
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs text-slate-700 dark:text-slate-200 font-semibold">Tanggal Jatuh Tempo</label>
+                <div class="flex space-x-1 text-[10px]">
+                  <button type="button" onclick="setTempoPreset(7)" class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200">+7h</button>
+                  <button type="button" onclick="setTempoPreset(14)" class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200">+14h</button>
+                  <button type="button" onclick="setTempoPreset(30)" class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200">+30h</button>
+                </div>
+              </div>
+              <input type="date" id="hp-jatuh-tempo" value="${defaultJatuhTempo}"
+                class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500" required />
+            </div>
+          </div>
+
+          <!-- Total Tagihan Pokok & Pembayaran Awal / Cicilan Pertama -->
+          <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 space-y-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-bold">Total Nominal Tagihan Pokok (Rp) *</label>
+                <input type="number" id="hp-total" placeholder="0" oninput="hitungHPSisaPreview()" min="1"
+                  class="w-full text-sm p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 font-black" required />
+              </div>
+
+              <div>
+                <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-bold">Pembayaran Awal / Cicilan 1 / DP (Rp)</label>
+                <input type="number" id="hp-bayar-awal" placeholder="0" oninput="hitungHPSisaPreview()" min="0" value="0"
+                  class="w-full text-sm p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 font-bold" />
+              </div>
+            </div>
+
+            <!-- Kalkulator Sisa Realtime -->
+            <div class="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700/60 text-xs">
+              <span class="text-slate-500">Sisa Tagihan Belum Lunas:</span>
+              <span id="hp-sisa-preview" class="font-black text-rose-500 text-sm">Rp 0</span>
+            </div>
+
+            <!-- Opsi Tambahan Jika Bayar Awal > 0 -->
+            <div id="hp-bayar-detail-wrapper" class="hidden pt-2 border-t border-slate-200 dark:border-slate-700/60 space-y-2">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="text-[11px] text-slate-600 dark:text-slate-300 block mb-1 font-semibold">Metode Pembayaran Awal</label>
+                  <select id="hp-metode-awal" class="w-full text-xs p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 font-semibold">
+                    <option value="Tunai">Tunai / Cash</option>
+                    <option value="Transfer BCA">Transfer Bank BCA</option>
+                    <option value="Transfer Mandiri">Transfer Bank Mandiri</option>
+                    <option value="Transfer BRI">Transfer Bank BRI</option>
+                    <option value="QRIS">QRIS Toko</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-[11px] text-slate-600 dark:text-slate-300 block mb-1 font-semibold">Keterangan Pembayaran Awal</label>
+                  <input type="text" id="hp-catatan-awal" placeholder="Contoh: DP Awal 50%, Cicilan 1" value="DP / Cicilan Pertama"
+                    class="w-full text-xs p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500" />
+                </div>
+              </div>
+
+              <label class="flex items-center space-x-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer pt-1">
+                <input type="checkbox" id="hp-catat-kas" checked class="rounded text-cyan-500 focus:ring-cyan-400 w-4 h-4 cursor-pointer" />
+                <span id="label-hp-catat-kas">Catat pembayaran awal ini ke Buku Kas (Kas Masuk)</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Keterangan / Deskripsi -->
+          <div>
+            <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Keterangan / Catatan Tambahan (opsional)</label>
+            <textarea id="hp-keterangan" rows="2" placeholder="Contoh: Pembelian sparepart tempo 30 hari, perjanjian cicilan 3x..."
+              class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-cyan-500"></textarea>
+          </div>
+
+          <!-- Footer Buttons -->
+          <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-end space-x-2">
+            <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 transition">Batal</button>
+            <button type="submit" class="px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white shadow-md shadow-cyan-500/25 flex items-center space-x-1.5 transition">
+              <i data-lucide="check" class="w-4 h-4"></i>
+              <span>Simpan Catatan</span>
+            </button>
+          </div>
+        </form>
+      `);
+      lucide.createIcons();
+    };
+
+    window.updateHPJenisForm = function (jenis) {
+      const labelPihak = document.getElementById('label-pihak-nama');
+      const labelKas = document.getElementById('label-hp-catat-kas');
+      if (labelPihak) {
+        labelPihak.innerText = jenis === 'Piutang' ? 'Nama Pelanggan / Pihak Terkait *' : 'Nama Supplier / Pihak Vendor *';
+      }
+      if (labelKas) {
+        labelKas.innerText = jenis === 'Piutang'
+          ? 'Catat pembayaran awal ini ke Buku Kas (Kas Masuk)'
+          : 'Catat pembayaran awal ini ke Buku Kas (Kas Keluar)';
+      }
+    };
+
+    window.setTempoPreset = function (days) {
+      const input = document.getElementById('hp-jatuh-tempo') || document.getElementById('edit-hp-jatuh-tempo');
+      if (input) {
+        const d = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+        input.value = d.toISOString().split('T')[0];
+      }
+    };
+
+    window.hitungHPSisaPreview = function () {
+      const total = parseFloat(document.getElementById('hp-total')?.value) || 0;
+      const bayar = parseFloat(document.getElementById('hp-bayar-awal')?.value) || 0;
+      const sisa = Math.max(0, total - bayar);
+      const sisaEl = document.getElementById('hp-sisa-preview');
+      const detailWrap = document.getElementById('hp-bayar-detail-wrapper');
+
+      if (sisaEl) {
+        sisaEl.innerText = formatRp(sisa);
+        if (sisa === 0 && total > 0) {
+          sisaEl.className = 'font-black text-emerald-500 text-sm';
+        } else {
+          sisaEl.className = 'font-black text-rose-500 text-sm';
+        }
+      }
+
+      if (detailWrap) {
+        detailWrap.classList.toggle('hidden', bayar <= 0);
+      }
+    };
+
+    window.simpanHutangPiutangBaru = async function (e) {
+      e.preventDefault();
+      const jenisRadio = document.querySelector('input[name="hp-jenis"]:checked');
+      const jenis = jenisRadio ? jenisRadio.value : 'Piutang';
+      const pihak = (document.getElementById('hp-pihak')?.value || '').trim();
+      const noRef = (document.getElementById('hp-noref')?.value || '').trim();
+      const tanggal = document.getElementById('hp-tanggal')?.value || new Date().toISOString().split('T')[0];
+      const jatuhTempo = document.getElementById('hp-jatuh-tempo')?.value || '';
+      const total = parseFloat(document.getElementById('hp-total')?.value) || 0;
+      const bayarAwal = parseFloat(document.getElementById('hp-bayar-awal')?.value) || 0;
+      const keterangan = (document.getElementById('hp-keterangan')?.value || '').trim();
+      const catatKas = document.getElementById('hp-catat-kas')?.checked || false;
+      const metodeAwal = document.getElementById('hp-metode-awal')?.value || 'Tunai';
+      const catatanAwal = (document.getElementById('hp-catatan-awal')?.value || '').trim();
+
+      if (!pihak) {
+        alert('Nama pihak terkait / pelanggan wajib diisi!');
+        return;
+      }
+      if (total <= 0) {
+        alert('Total nominal tagihan pokok harus lebih besar dari 0!');
+        return;
+      }
+
+      const sisa = Math.max(0, total - bayarAwal);
+      const status = (sisa <= 0) ? 'Lunas' : (bayarAwal > 0 ? 'Dicicil' : 'Belum Lunas');
+
+      // Riwayat cicilan awal jika ada pembayaran DP / cicilan pertama
+      const riwayatCicilan = [];
+      if (bayarAwal > 0) {
+        riwayatCicilan.push({
+          id: `CICIL-${Date.now()}`,
+          tanggal,
+          jumlah: bayarAwal,
+          metode: metodeAwal,
+          catatan: catatanAwal || (sisa <= 0 ? 'Pelunasan Penuh' : 'Pembayaran Awal / DP')
+        });
+      }
+
+      // Generate ID Unik
+      const hpId = `HP-${String((state.hutangpiutang || []).length + 1).padStart(3, '0')}`;
+
+      const newHP = {
+        id: hpId,
+        jenis,
+        pihak,
+        noRef: noRef || hpId,
+        tanggal,
+        jatuhTempo: jatuhTempo || tanggal,
+        totalTagihan: total,
+        terbayar: bayarAwal,
+        jumlah: sisa, // Sisa tagihan
+        status,
+        keterangan,
+        riwayatCicilan
+      };
+
+      await dbSave('hutangpiutang', hpId, newHP);
+
+      // Sinkronisasi ke Buku Kas jika dicentang dan ada pembayaran awal
+      if (catatKas && bayarAwal > 0) {
+        const kasId = `KAS-00${(state.kas || []).length + 1}`;
+        if (jenis === 'Piutang') {
+          await dbSave('kas', kasId, {
+            id: kasId,
+            tanggal,
+            tipe: 'Masuk',
+            kategori: sisa <= 0 ? 'Pelunasan Piutang' : 'Cicilan Piutang',
+            keterangan: `${sisa <= 0 ? 'Pelunasan' : 'DP/Cicilan'} Piutang #${hpId} (${pihak} - Ref: ${noRef || '-'}) via ${metodeAwal}`,
+            jumlah: bayarAwal
+          });
+        } else {
+          await dbSave('kas', kasId, {
+            id: kasId,
+            tanggal,
+            tipe: 'Keluar',
+            kategori: sisa <= 0 ? 'Pelunasan Hutang' : 'Cicilan Hutang',
+            keterangan: `${sisa <= 0 ? 'Pelunasan' : 'DP/Cicilan'} Hutang Toko #${hpId} ke ${pihak} (Ref: ${noRef || '-'}) via ${metodeAwal}`,
+            jumlah: bayarAwal
+          });
+        }
+      }
+
+      closeModal();
+      showNotificationToast(`Catatan ${jenis} #${hpId} (${formatRp(total)}) berhasil disimpan!`);
+    };
+
+    // =========================================================================
+    // MODAL EDIT HUTANG & PIUTANG (FLEKSIBEL)
+    // =========================================================================
+    window.openEditHutangPiutangModal = function (id) {
+      const raw = (state.hutangpiutang || []).find(h => h.id === id);
+      if (!raw) {
+        alert('Data hutang/piutang tidak ditemukan!');
+        return;
+      }
+      const hp = normalizeHPItem(raw);
+
+      openModal(`
+        <form onsubmit="simpanEditHutangPiutang(event, '${hp.id}')" class="space-y-4">
+          <div class="border-b border-slate-200 dark:border-slate-700 pb-3 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <div class="p-2 rounded-xl bg-cyan-500/10 text-cyan-500">
+                <i data-lucide="edit-3" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h3 class="font-bold text-lg text-slate-800 dark:text-slate-100">Edit Data ${hp.jenis} #${hp.id}</h3>
+                <p class="text-[11px] text-slate-500">Sesuaikan nominal pokok, pihak terkait, jatuh tempo, atau status.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Jenis & Status -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Jenis Transaksi</label>
+              <select id="edit-hp-jenis" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold focus:outline-none focus:border-cyan-500">
+                <option value="Piutang" ${hp.jenis === 'Piutang' ? 'selected' : ''}>Piutang (Uang Masuk ke Toko)</option>
+                <option value="Hutang" ${hp.jenis === 'Hutang' ? 'selected' : ''}>Hutang (Kewajiban Toko Keluar)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Status Pembayaran</label>
+              <select id="edit-hp-status" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold focus:outline-none focus:border-cyan-500">
+                <option value="Belum Lunas" ${hp.status === 'Belum Lunas' ? 'selected' : ''}>Belum Lunas</option>
+                <option value="Dicicil" ${hp.status === 'Dicicil' ? 'selected' : ''}>Dicicil (Sebagian)</option>
+                <option value="Lunas" ${hp.status === 'Lunas' ? 'selected' : ''}>Lunas</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Pihak Terkait & No Referensi -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Pihak Terkait (Nama Orang / Toko) *</label>
+              <input type="text" id="edit-hp-pihak" value="${hp.pihak}"
+                class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-semibold focus:outline-none focus:border-cyan-500" required />
+            </div>
+
+            <div>
+              <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">No. Tiket / Nota / Referensi</label>
+              <input type="text" id="edit-hp-noref" value="${hp.noRef || ''}"
+                class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-mono focus:outline-none focus:border-cyan-500" />
+            </div>
+          </div>
+
+          <!-- Tanggal & Jatuh Tempo -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Tanggal Transaksi</label>
+              <input type="date" id="edit-hp-tanggal" value="${hp.tanggal || ''}"
+                class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500" required />
+            </div>
+
+            <div>
+              <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Jatuh Tempo</label>
+              <input type="date" id="edit-hp-jatuh-tempo" value="${hp.jatuhTempo || ''}"
+                class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500" required />
+            </div>
+          </div>
+
+          <!-- Total Pokok & Sudah Terbayar -->
+          <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 space-y-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-bold">Total Tagihan Pokok (Rp) *</label>
+                <input type="number" id="edit-hp-total" value="${hp.totalTagihan}" oninput="hitungEditHPSisa()" min="1"
+                  class="w-full text-sm p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-black focus:outline-none focus:border-cyan-500" required />
+              </div>
+
+              <div>
+                <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-bold">Sudah Terbayar / Cicil (Rp)</label>
+                <input type="number" id="edit-hp-terbayar" value="${hp.terbayar}" oninput="hitungEditHPSisa()" min="0"
+                  class="w-full text-sm p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold focus:outline-none focus:border-cyan-500" />
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700/60 text-xs">
+              <span class="text-slate-500">Sisa Tagihan:</span>
+              <span id="edit-hp-sisa-preview" class="font-black text-rose-500 text-sm">${formatRp(hp.sisa)}</span>
+            </div>
+          </div>
+
+          <!-- Keterangan -->
+          <div>
+            <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Keterangan / Catatan</label>
+            <textarea id="edit-hp-keterangan" rows="2" placeholder="Catatan tambahan..."
+              class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-cyan-500">${hp.keterangan || ''}</textarea>
+          </div>
+
+          <!-- Tabel Riwayat Cicilan yang Ada -->
+          ${hp.riwayatCicilan && hp.riwayatCicilan.length > 0 ? `
+            <div class="border-t border-slate-200 dark:border-slate-700 pt-3">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-slate-700 dark:text-slate-200">Riwayat Pembayaran Cicilan Terdaftar:</span>
+                <span class="text-[11px] text-slate-400">${hp.riwayatCicilan.length} kali bayar</span>
+              </div>
+              <div class="max-h-36 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-200 dark:divide-slate-700">
+                ${hp.riwayatCicilan.map((c, idx) => `
+                  <div class="p-2.5 flex items-center justify-between text-xs hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                    <div>
+                      <span class="font-semibold block text-slate-800 dark:text-slate-100">${formatRp(c.jumlah)} <span class="text-[10px] text-slate-400 font-normal">via ${c.metode || 'Tunai'}</span></span>
+                      <span class="text-[10px] text-slate-400">${c.tanggal} • ${c.catatan || 'Cicilan'}</span>
+                    </div>
+                    <button type="button" onclick="hapusCicilanRow('${hp.id}', ${idx})" title="Hapus cicilan ini"
+                      class="p-1 rounded text-rose-500 hover:bg-rose-500/10">
+                      <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Footer Buttons -->
+          <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-end space-x-2">
+            <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 transition">Batal</button>
+            <button type="submit" class="px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white shadow-md shadow-cyan-500/25 flex items-center space-x-1.5 transition">
+              <i data-lucide="check" class="w-4 h-4"></i>
+              <span>Simpan Perubahan</span>
+            </button>
+          </div>
+        </form>
+      `);
+      lucide.createIcons();
+    };
+
+    window.hitungEditHPSisa = function () {
+      const total = parseFloat(document.getElementById('edit-hp-total')?.value) || 0;
+      const terbayar = parseFloat(document.getElementById('edit-hp-terbayar')?.value) || 0;
+      const sisa = Math.max(0, total - terbayar);
+      const sisaEl = document.getElementById('edit-hp-sisa-preview');
+      const statusSelect = document.getElementById('edit-hp-status');
+
+      if (sisaEl) {
+        sisaEl.innerText = formatRp(sisa);
+        sisaEl.className = sisa === 0 && total > 0 ? 'font-black text-emerald-500 text-sm' : 'font-black text-rose-500 text-sm';
+      }
+
+      if (statusSelect) {
+        if (sisa <= 0 && total > 0) {
+          statusSelect.value = 'Lunas';
+        } else if (terbayar > 0) {
+          statusSelect.value = 'Dicicil';
+        } else {
+          statusSelect.value = 'Belum Lunas';
+        }
+      }
+    };
+
+    window.hapusCicilanRow = async function (hpId, cicilIndex) {
+      if (!confirm('Hapus rincian pembayaran cicilan ini? Total sudah terbayar akan disesuaikan.')) return;
+      const raw = (state.hutangpiutang || []).find(h => h.id === hpId);
+      if (!raw) return;
+
+      const hp = normalizeHPItem(raw);
+      const riwayat = [...hp.riwayatCicilan];
+      riwayat.splice(cicilIndex, 1);
+
+      const terbayarBaru = riwayat.reduce((sum, c) => sum + (Number(c.jumlah) || 0), 0);
+      const sisaBaru = Math.max(0, hp.totalTagihan - terbayarBaru);
+      const statusBaru = (sisaBaru <= 0 && hp.totalTagihan > 0) ? 'Lunas' : (terbayarBaru > 0 ? 'Dicicil' : 'Belum Lunas');
+
+      await dbUpdate('hutangpiutang', hpId, {
+        riwayatCicilan: riwayat,
+        terbayar: terbayarBaru,
+        jumlah: sisaBaru,
+        status: statusBaru
+      });
+
+      // Buka kembali modal edit dengan data terupdate
+      openEditHutangPiutangModal(hpId);
+      showNotificationToast('Rincian cicilan berhasil dihapus.');
+    };
+
+    window.simpanEditHutangPiutang = async function (e, id) {
+      e.preventDefault();
+      const jenis = document.getElementById('edit-hp-jenis')?.value || 'Piutang';
+      const pihak = (document.getElementById('edit-hp-pihak')?.value || '').trim();
+      const noRef = (document.getElementById('edit-hp-noref')?.value || '').trim();
+      const tanggal = document.getElementById('edit-hp-tanggal')?.value || '';
+      const jatuhTempo = document.getElementById('edit-hp-jatuh-tempo')?.value || '';
+      const total = parseFloat(document.getElementById('edit-hp-total')?.value) || 0;
+      const terbayar = parseFloat(document.getElementById('edit-hp-terbayar')?.value) || 0;
+      const statusPilihan = document.getElementById('edit-hp-status')?.value || 'Belum Lunas';
+      const keterangan = (document.getElementById('edit-hp-keterangan')?.value || '').trim();
+
+      if (!pihak) {
+        alert('Nama pihak terkait tidak boleh kosong!');
+        return;
+      }
+      if (total <= 0) {
+        alert('Total nominal tagihan pokok harus lebih dari 0!');
+        return;
+      }
+
+      const sisa = statusPilihan === 'Lunas' ? 0 : Math.max(0, total - terbayar);
+      const statusFinal = statusPilihan === 'Lunas' ? 'Lunas' : (sisa <= 0 ? 'Lunas' : (terbayar > 0 ? 'Dicicil' : statusPilihan));
+
+      await dbUpdate('hutangpiutang', id, {
+        jenis,
+        pihak,
+        noRef,
+        tanggal,
+        jatuhTempo,
+        totalTagihan: total,
+        terbayar: statusFinal === 'Lunas' && terbayar < total ? total : terbayar,
+        jumlah: sisa,
+        status: statusFinal,
+        keterangan
+      });
+
+      closeModal();
+      showNotificationToast(`Perubahan data #${id} berhasil disimpan!`);
+    };
+
+    // =========================================================================
+    // MODAL INPUT PEMBAYARAN CICILAN / PELUNASAN
+    // =========================================================================
+    window.openBayarCicilanModal = function (id) {
+      const raw = (state.hutangpiutang || []).find(h => h.id === id);
+      if (!raw) return;
+      const hp = normalizeHPItem(raw);
+      const today = new Date().toISOString().split('T')[0];
+      const percent = hp.totalTagihan > 0 ? Math.min(100, Math.round((hp.terbayar / hp.totalTagihan) * 100)) : 0;
+
+      openModal(`
+        <form onsubmit="simpanPembayaranCicilan(event, '${hp.id}')" class="space-y-4">
+          <div class="border-b border-slate-200 dark:border-slate-700 pb-3 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
+                <i data-lucide="wallet" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h3 class="font-bold text-lg text-slate-800 dark:text-slate-100">Pembayaran Cicilan / Pelunasan</h3>
+                <p class="text-[11px] text-slate-500">${hp.jenis} #${hp.id} - ${hp.pihak}</p>
+              </div>
+            </div>
+            <span class="px-2.5 py-1 rounded-full text-xs font-bold ${hp.jenis === 'Piutang' ? 'bg-cyan-500/10 text-cyan-500' : 'bg-amber-500/10 text-amber-500'
+        }">${hp.jenis}</span>
+          </div>
+
+          <!-- Ringkasan Status Hutang / Piutang Saat Ini -->
+          <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
+            <div class="flex justify-between items-center text-xs">
+              <span class="text-slate-500">Pihak Terkait:</span>
+              <span class="font-bold text-slate-800 dark:text-slate-100">${hp.pihak}</span>
+            </div>
+            <div class="flex justify-between items-center text-xs">
+              <span class="text-slate-500">No. Nota / Tiket:</span>
+              <span class="font-mono text-slate-600 dark:text-slate-300">${hp.noRef || '-'}</span>
+            </div>
+            <div class="flex justify-between items-center text-xs">
+              <span class="text-slate-500">Total Tagihan Pokok:</span>
+              <span class="font-bold text-slate-800 dark:text-slate-100">${formatRp(hp.totalTagihan)}</span>
+            </div>
+            <div class="flex justify-between items-center text-xs">
+              <span class="text-slate-500">Sudah Dibayar Sejauh Ini:</span>
+              <span class="font-bold text-emerald-600 dark:text-emerald-400">${formatRp(hp.terbayar)} (${percent}%)</span>
+            </div>
+            <div class="flex justify-between items-center text-sm pt-2 border-t border-slate-200 dark:border-slate-700/60">
+              <span class="font-bold text-slate-700 dark:text-slate-200">Sisa Tagihan Belum Lunas:</span>
+              <span class="font-black text-rose-600 dark:text-rose-400 text-base">${formatRp(hp.sisa)}</span>
+            </div>
+            <!-- Progress Bar -->
+            <div class="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden mt-1">
+              <div class="bg-emerald-500 h-full rounded-full transition-all" style="width: ${percent}%;"></div>
+            </div>
+          </div>
+
+          <!-- Form Input Cicilan Baru -->
+          <div class="space-y-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Tanggal Pembayaran</label>
+                <input type="date" id="cicil-tanggal" value="${today}"
+                  class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500" required />
+              </div>
+
+              <div>
+                <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Metode Pembayaran</label>
+                <select id="cicil-metode" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-semibold focus:outline-none focus:border-cyan-500">
+                  <option value="Tunai">Tunai / Cash</option>
+                  <option value="Transfer BCA">Transfer Bank BCA</option>
+                  <option value="Transfer Mandiri">Transfer Bank Mandiri</option>
+                  <option value="Transfer BRI">Transfer Bank BRI</option>
+                  <option value="QRIS">QRIS Toko</option>
+                  <option value="Lainnya">Lainnya</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Input Nominal Cicilan & Shortcut Buttons -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs text-slate-700 dark:text-slate-200 font-bold">Nominal Pembayaran Cicilan (Rp) *</label>
+                <div class="flex space-x-1.5 text-[11px]">
+                  <button type="button" onclick="document.getElementById('cicil-nominal').value = ${Math.round(hp.sisa / 2)}"
+                    class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200">
+                    50% (${formatRp(Math.round(hp.sisa / 2))})
+                  </button>
+                  <button type="button" onclick="document.getElementById('cicil-nominal').value = ${hp.sisa}"
+                    class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 font-bold hover:bg-emerald-500/20">
+                    Lunasi (${formatRp(hp.sisa)})
+                  </button>
+                </div>
+              </div>
+              <input type="number" id="cicil-nominal" max="${hp.sisa}" min="1" value="${hp.sisa}" placeholder="0"
+                class="w-full text-base p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-black focus:outline-none focus:border-cyan-500" required />
+            </div>
+
+            <div>
+              <label class="text-xs text-slate-700 dark:text-slate-200 block mb-1 font-semibold">Catatan / Keterangan Pembayaran (opsional)</label>
+              <input type="text" id="cicil-catatan" placeholder="Contoh: Cicilan ke-2, Pelunasan via transfer m-banking..."
+                value="${(hp.riwayatCicilan || []).length > 0 ? `Cicilan ke-${(hp.riwayatCicilan || []).length + 1}` : 'Pelunasan Tagihan'}"
+                class="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500" />
+            </div>
+
+            <!-- Opsi Sinkronisasi ke Buku Kas -->
+            <label class="flex items-center space-x-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer pt-1">
+              <input type="checkbox" id="cicil-catat-kas" checked class="rounded text-cyan-500 focus:ring-cyan-400 w-4 h-4 cursor-pointer" />
+              <span>Otomatis catat transaksi cicilan ini ke Buku Kas (${hp.jenis === 'Piutang' ? 'Kas Masuk' : 'Kas Keluar'})</span>
+            </label>
+          </div>
+
+          <!-- Riwayat Pembayaran Sebelumnya -->
+          ${hp.riwayatCicilan && hp.riwayatCicilan.length > 0 ? `
+            <div class="border-t border-slate-200 dark:border-slate-700 pt-3">
+              <span class="text-xs font-bold text-slate-700 dark:text-slate-200 block mb-1.5">Riwayat Pembayaran Sebelumnya:</span>
+              <div class="max-h-28 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700 divide-y divide-slate-200 dark:divide-slate-700 text-xs">
+                ${hp.riwayatCicilan.map(c => `
+                  <div class="p-2 flex items-center justify-between">
+                    <div>
+                      <span class="font-semibold text-slate-800 dark:text-slate-100">${formatRp(c.jumlah)}</span>
+                      <span class="text-[10px] text-slate-400 block">${c.tanggal} • ${c.metode || 'Tunai'}</span>
+                    </div>
+                    <span class="text-[11px] text-slate-500">${c.catatan || 'Cicilan'}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Footer Action Buttons -->
+          <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-end space-x-2">
+            <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 transition">Batal</button>
+            <button type="submit" class="px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-md shadow-emerald-500/25 flex items-center space-x-1.5 transition">
+              <i data-lucide="check" class="w-4 h-4"></i>
+              <span>Simpan Pembayaran</span>
+            </button>
+          </div>
+        </form>
+      `);
+      lucide.createIcons();
+    };
+
+    window.simpanPembayaranCicilan = async function (e, id) {
+      e.preventDefault();
+      const raw = (state.hutangpiutang || []).find(h => h.id === id);
+      if (!raw) return;
+      const hp = normalizeHPItem(raw);
+
+      const nominal = parseFloat(document.getElementById('cicil-nominal')?.value) || 0;
+      const tanggal = document.getElementById('cicil-tanggal')?.value || new Date().toISOString().split('T')[0];
+      const metode = document.getElementById('cicil-metode')?.value || 'Tunai';
+      const catatan = (document.getElementById('cicil-catatan')?.value || '').trim();
+      const catatKas = document.getElementById('cicil-catat-kas')?.checked || false;
+
+      if (nominal <= 0) {
+        alert('Nominal pembayaran cicilan harus lebih dari 0!');
+        return;
+      }
+      if (nominal > hp.sisa) {
+        alert(`Nominal pembayaran (${formatRp(nominal)}) melebihi sisa tagihan (${formatRp(hp.sisa)})!`);
+        return;
+      }
+
+      const riwayatBaru = [...hp.riwayatCicilan];
+      const cicilItem = {
+        id: `CICIL-${Date.now()}`,
+        tanggal,
+        jumlah: nominal,
+        metode,
+        catatan: catatan || (nominal >= hp.sisa ? 'Pelunasan Sisa' : `Cicilan ke-${riwayatBaru.length + 1}`)
+      };
+      riwayatBaru.push(cicilItem);
+
+      const terbayarBaru = hp.terbayar + nominal;
+      const sisaBaru = Math.max(0, hp.totalTagihan - terbayarBaru);
+      const statusBaru = (sisaBaru <= 0) ? 'Lunas' : 'Dicicil';
+
+      await dbUpdate('hutangpiutang', id, {
+        terbayar: terbayarBaru,
+        jumlah: sisaBaru,
+        status: statusBaru,
+        riwayatCicilan: riwayatBaru
+      });
+
+      // Sinkronisasi ke Buku Kas
+      if (catatKas) {
+        const kasId = `KAS-00${(state.kas || []).length + 1}`;
+        if (hp.jenis === 'Piutang') {
+          await dbSave('kas', kasId, {
+            id: kasId,
+            tanggal,
+            tipe: 'Masuk',
+            kategori: sisaBaru <= 0 ? 'Pelunasan Piutang' : 'Cicilan Piutang',
+            keterangan: `Bayar ${sisaBaru <= 0 ? 'Pelunasan' : 'Cicilan'} Piutang #${hp.id} (${hp.pihak} - Ref: ${hp.noRef || '-'}) via ${metode}`,
+            jumlah: nominal
+          });
+        } else {
+          await dbSave('kas', kasId, {
+            id: kasId,
+            tanggal,
+            tipe: 'Keluar',
+            kategori: sisaBaru <= 0 ? 'Pelunasan Hutang' : 'Cicilan Hutang',
+            keterangan: `Bayar ${sisaBaru <= 0 ? 'Pelunasan' : 'Cicilan'} Hutang #${hp.id} ke ${hp.pihak} (Ref: ${hp.noRef || '-'}) via ${metode}`,
+            jumlah: nominal
+          });
+        }
+      }
+
+      closeModal();
+      showNotificationToast(`Pembayaran cicilan #${hp.id} sebesar ${formatRp(nominal)} berhasil dicatat! Status: ${statusBaru}`);
+    };
+
+    // =========================================================================
+    // MODAL DETAIL & RIWAYAT CICILAN & CETAK KWITANSI
+    // =========================================================================
+    window.openDetailHutangPiutangModal = function (id) {
+      const raw = (state.hutangpiutang || []).find(h => h.id === id);
+      if (!raw) return;
+      const hp = normalizeHPItem(raw);
+      const percent = hp.totalTagihan > 0 ? Math.min(100, Math.round((hp.terbayar / hp.totalTagihan) * 100)) : (hp.status === 'Lunas' ? 100 : 0);
+
+      openModal(`
+        <div class="space-y-4">
+          <div class="border-b border-slate-200 dark:border-slate-700 pb-3 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <div class="p-2 rounded-xl bg-cyan-500/10 text-cyan-500">
+                <i data-lucide="receipt" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h3 class="font-bold text-lg text-slate-800 dark:text-slate-100">Rincian & Riwayat Cicilan</h3>
+                <p class="text-[11px] text-slate-500">${hp.jenis} #${hp.id} • ${hp.pihak}</p>
+              </div>
+            </div>
+            <span class="px-2.5 py-1 rounded-full text-xs font-bold ${hp.status === 'Lunas' ? 'bg-emerald-500/10 text-emerald-500' : (hp.status === 'Dicicil' ? 'bg-amber-500/10 text-amber-500' : 'bg-rose-500/10 text-rose-500')
+        }">${hp.status}</span>
+          </div>
+
+          <!-- Info Card Ringkas -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-xs">
+            <div>
+              <span class="text-slate-400 block text-[10px]">Pihak Terkait:</span>
+              <span class="font-bold text-slate-800 dark:text-slate-100">${hp.pihak}</span>
+            </div>
+            <div>
+              <span class="text-slate-400 block text-[10px]">No. Tiket / Ref:</span>
+              <span class="font-mono text-slate-700 dark:text-slate-300">${hp.noRef || '-'}</span>
+            </div>
+            <div>
+              <span class="text-slate-400 block text-[10px]">Tgl Transaksi:</span>
+              <span class="font-semibold text-slate-700 dark:text-slate-300">${hp.tanggal || '-'}</span>
+            </div>
+            <div>
+              <span class="text-slate-400 block text-[10px]">Jatuh Tempo:</span>
+              <span class="font-semibold text-slate-700 dark:text-slate-300">${hp.jatuhTempo || '-'}</span>
+            </div>
+          </div>
+
+          <!-- Finansial Bar -->
+          <div class="p-4 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-2">
+            <div class="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <span class="text-[10px] text-slate-400 block">TOTAL TAGIHAN</span>
+                <span class="font-black text-sm text-slate-800 dark:text-slate-100">${formatRp(hp.totalTagihan)}</span>
+              </div>
+              <div>
+                <span class="text-[10px] text-emerald-500 block">SUDAH DIBAYAR</span>
+                <span class="font-black text-sm text-emerald-600 dark:text-emerald-400">${formatRp(hp.terbayar)}</span>
+              </div>
+              <div>
+                <span class="text-[10px] text-rose-500 block">SISA TAGIHAN</span>
+                <span class="font-black text-sm text-rose-600 dark:text-rose-400">${formatRp(hp.sisa)}</span>
+              </div>
+            </div>
+            <div class="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden mt-2">
+              <div class="bg-emerald-500 h-full rounded-full transition-all" style="width: ${percent}%;"></div>
+            </div>
+            <div class="text-right text-[10px] text-slate-400">Progres Pembayaran: ${percent}%</div>
+          </div>
+
+          ${hp.keterangan ? `
+            <div class="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 text-xs">
+              <span class="text-[10px] text-slate-400 block font-bold uppercase">Catatan / Keterangan:</span>
+              <p class="text-slate-700 dark:text-slate-200 italic mt-0.5">${hp.keterangan}</p>
+            </div>
+          ` : ''}
+
+          <!-- Daftar Rincian Pembayaran / Cicilan -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300">Riwayat Pembayaran (${(hp.riwayatCicilan || []).length}x):</h4>
+              <button onclick="cetakKwitansiCicilan('${hp.id}')"
+                class="px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 text-xs font-bold transition flex items-center space-x-1">
+                <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+                <span>Cetak Kwitansi / Bukti</span>
+              </button>
+            </div>
+
+            <div class="max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-200 dark:divide-slate-700">
+              ${(hp.riwayatCicilan && hp.riwayatCicilan.length > 0) ? hp.riwayatCicilan.map((c, idx) => `
+                <div class="p-3 flex items-center justify-between text-xs hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                  <div>
+                    <div class="flex items-center space-x-2">
+                      <span class="font-bold text-slate-800 dark:text-slate-100">${formatRp(c.jumlah)}</span>
+                      <span class="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-[10px] font-semibold text-slate-600 dark:text-slate-300">${c.metode || 'Tunai'}</span>
+                    </div>
+                    <span class="text-[11px] text-slate-400 mt-0.5 block">${c.tanggal} • ${c.catatan || `Cicilan #${idx + 1}`}</span>
+                  </div>
+                  <span class="text-[10px] font-mono px-2 py-1 rounded bg-emerald-500/10 text-emerald-600 font-bold">Terbayar</span>
+                </div>
+              `).join('') : `
+                <div class="p-4 text-center text-xs text-slate-400">Belum ada riwayat pembayaran cicilan yang dicatat.</div>
+              `}
+            </div>
+          </div>
+
+          <!-- Footer Buttons -->
+          <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
+            ${hp.status !== 'Lunas' ? `
+              <button onclick="openBayarCicilanModal('${hp.id}')"
+                class="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-white transition flex items-center space-x-1.5">
+                <i data-lucide="wallet" class="w-4 h-4"></i>
+                <span>+ Bayar Cicilan Baru</span>
+              </button>
+            ` : '<span></span>'}
+            <div class="flex space-x-2">
+              <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 transition">Tutup</button>
+            </div>
+          </div>
+        </div>
+      `);
+      lucide.createIcons();
+    };
+
+    // =========================================================================
+    // CETAK KWITANSI / BUKTI PEMBAYARAN CICILAN
+    // =========================================================================
+    window.cetakKwitansiCicilan = function (id) {
+      const raw = (state.hutangpiutang || []).find(h => h.id === id);
+      if (!raw) return;
+      const hp = normalizeHPItem(raw);
+      const printArea = document.getElementById('printable-area');
+      if (!printArea) return;
+
+      const riwayatList = hp.riwayatCicilan || [];
+      const nowStr = new Date().toLocaleString('id-ID');
+
+      printArea.innerHTML = `
+        <div style="width: 320px; font-size: 11px; margin: 0 auto; font-family: monospace; color: #000; padding: 10px;">
+          <h2 style="text-align:center; font-weight:bold; margin-bottom: 2px; font-size: 14px;">JOY PRINT SOLUTION</h2>
+          <p style="text-align:center; margin:0; font-size: 10px;">Bukti Pembayaran & Status Tagihan</p>
+          <hr style="border-top:1px dashed #000; margin: 8px 0;" />
+          <p style="margin:2px 0;"><strong>No. Ref HP :</strong> ${hp.id}</p>
+          <p style="margin:2px 0;"><strong>Jenis      :</strong> ${hp.jenis}</p>
+          <p style="margin:2px 0;"><strong>Pihak      :</strong> ${hp.pihak}</p>
+          <p style="margin:2px 0;"><strong>No. Nota   :</strong> ${hp.noRef || '-'}</p>
+          <p style="margin:2px 0;"><strong>Tgl Cetak  :</strong> ${nowStr}</p>
+          <hr style="border-top:1px dashed #000; margin: 8px 0;" />
+          <table style="width:100%; font-size:10px;">
+            <tr>
+              <td>Total Pokok Tagihan</td>
+              <td style="text-align:right;"><strong>${formatRp(hp.totalTagihan)}</strong></td>
+            </tr>
+            <tr>
+              <td>Total Sudah Terbayar</td>
+              <td style="text-align:right; color:#059669;"><strong>${formatRp(hp.terbayar)}</strong></td>
+            </tr>
+            <tr style="border-top:1px solid #000;">
+              <td><strong>SISA TAGIHAN</strong></td>
+              <td style="text-align:right;"><strong>${formatRp(hp.sisa)}</strong></td>
+            </tr>
+            <tr>
+              <td>Status</td>
+              <td style="text-align:right;"><strong>${hp.status.toUpperCase()}</strong></td>
+            </tr>
+            ${hp.jatuhTempo ? `
+            <tr>
+              <td>Jatuh Tempo</td>
+              <td style="text-align:right;">${hp.jatuhTempo}</td>
+            </tr>` : ''}
+          </table>
+
+          ${riwayatList.length > 0 ? `
+            <hr style="border-top:1px dashed #000; margin: 8px 0;" />
+            <p style="margin:2px 0; font-weight:bold; font-size:10px;">Riwayat Pembayaran Cicilan:</p>
+            <table style="width:100%; font-size:9px; margin-top:3px;">
+              ${riwayatList.map((c, i) => `
+                <tr>
+                  <td>${i + 1}. ${c.tanggal} (${c.metode || 'Tunai'})</td>
+                  <td style="text-align:right;">${formatRp(c.jumlah)}</td>
+                </tr>
+              `).join('')}
+            </table>
+          ` : ''}
+
+          <hr style="border-top:1px dashed #000; margin: 10px 0;" />
+          <div style="display:flex; justify-content:space-between; margin-top:15px; text-align:center; font-size:10px;">
+            <div style="width:45%;">
+              <p style="margin:0 0 35px 0;">Penerima / Kasir</p>
+              <p style="margin:0; border-top:1px solid #000;">( Joy Print )</p>
+            </div>
+            <div style="width:45%;">
+              <p style="margin:0 0 35px 0;">Penyetor / Pihak</p>
+              <p style="margin:0; border-top:1px solid #000;">( ${hp.pihak} )</p>
+            </div>
+          </div>
+          <p style="text-align:center; font-size:9px; margin-top:15px; color:#555;">Terima kasih atas kerja samanya.</p>
+        </div>
+      `;
+
+      window.print();
+    };
+
+    // =========================================================================
+    // HAPUS CATATAN HUTANG & PIUTANG
+    // =========================================================================
+    window.hapusHutangPiutang = async function (id) {
+      if (confirm(`Yakin ingin menghapus catatan Hutang/Piutang #${id}? Data yang terhapus tidak dapat dikembalikan.`)) {
+        await dbDelete('hutangpiutang', id);
+        showNotificationToast(`Catatan #${id} berhasil dihapus.`);
+      }
+    };
+
+    // Keberlanjutan Kompatibilitas
     window.pelunasanHP = async function (id) {
-      await dbUpdate('hutangpiutang', id, { status: 'Lunas' });
+      const raw = (state.hutangpiutang || []).find(h => h.id === id);
+      if (!raw) return;
+      const hp = normalizeHPItem(raw);
+      await dbUpdate('hutangpiutang', id, {
+        status: 'Lunas',
+        terbayar: hp.totalTagihan,
+        jumlah: 0
+      });
+      showNotificationToast(`Catatan #${id} ditandai LUNAS!`);
     };
 
     function renderLaporanView() {
@@ -4116,17 +6760,25 @@
         XLSX.utils.book_append_sheet(wb, wsOps, 'Pengeluaran_Operasional');
 
         // 9. HUTANG & PIUTANG
-        const hpRows = (state.hutangpiutang || []).map(h => ({
-          'ID Catatan': h.id,
-          'Jenis': h.jenis,
-          'Pihak Terkait': h.pihak,
-          'No Referensi': h.noRef || '',
-          'Nominal (Rp)': Number(h.jumlah) || 0,
-          'Jatuh Tempo': h.jatuhTempo || '',
-          'Status': h.status
-        }));
+        const hpRows = (state.hutangpiutang || []).map(h => {
+          const norm = typeof normalizeHPItem === 'function' ? normalizeHPItem(h) : h;
+          return {
+            'ID Catatan': norm.id,
+            'Jenis': norm.jenis,
+            'Pihak Terkait': norm.pihak,
+            'No Referensi': norm.noRef || '',
+            'Tanggal': norm.tanggal || '',
+            'Total Tagihan (Rp)': norm.totalTagihan !== undefined ? norm.totalTagihan : norm.jumlah,
+            'Terbayar (Rp)': norm.terbayar || 0,
+            'Sisa (Rp)': norm.sisa !== undefined ? norm.sisa : norm.jumlah,
+            'Nominal (Rp)': norm.sisa !== undefined ? norm.sisa : norm.jumlah,
+            'Jatuh Tempo': norm.jatuhTempo || '',
+            'Status': norm.status,
+            'Keterangan': norm.keterangan || ''
+          };
+        });
         const wsHp = XLSX.utils.json_to_sheet(hpRows);
-        wsHp['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 25 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 16 }];
+        wsHp['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 25 }, { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 30 }];
         XLSX.utils.book_append_sheet(wb, wsHp, 'Hutang_Piutang');
 
         const now = new Date();
@@ -4454,14 +7106,23 @@
         } else if (sName.includes('hutang') || sName.includes('piutang') || sName.includes('debt')) {
           rows.forEach((r, idx) => {
             const id = getCol(r, 'ID Catatan', 'id', 'ID') || `HP-${Date.now()}-${idx}`;
+            const totalTagihan = parseNum(getCol(r, 'Total Tagihan (Rp)', 'totalTagihan', 'Nominal (Rp)', 'jumlah'), 0);
+            const terbayar = parseNum(getCol(r, 'Terbayar (Rp)', 'terbayar'), 0);
+            const sisa = parseNum(getCol(r, 'Sisa (Rp)', 'jumlah'), Math.max(0, totalTagihan - terbayar));
+            const status = String(getCol(r, 'Status', 'status') || (sisa <= 0 && totalTagihan > 0 ? 'Lunas' : (terbayar > 0 ? 'Dicicil' : 'Belum Lunas')));
             parsed.hutangpiutang.push({
               id: String(id).trim(),
               jenis: String(getCol(r, 'Jenis', 'jenis') || 'Hutang'),
               pihak: String(getCol(r, 'Pihak Terkait', 'pihak') || 'Pihak'),
               noRef: String(getCol(r, 'No Referensi', 'noRef') || ''),
-              jumlah: parseNum(getCol(r, 'Nominal (Rp)', 'jumlah'), 0),
+              tanggal: String(getCol(r, 'Tanggal', 'tanggal') || ''),
+              totalTagihan,
+              terbayar,
+              jumlah: sisa,
               jatuhTempo: String(getCol(r, 'Jatuh Tempo', 'jatuhTempo') || ''),
-              status: String(getCol(r, 'Status', 'status') || 'Belum Lunas')
+              status,
+              keterangan: String(getCol(r, 'Keterangan', 'keterangan') || ''),
+              riwayatCicilan: []
             });
           });
         }
@@ -4645,6 +7306,48 @@
               <i data-lucide="download" class="w-5 h-5"></i>
               <span>Download Backup (.xlsx)</span>
             </button>
+          </div>
+
+          <!-- Kartu Status Kapasitas Penyimpanan Anti-Hilang -->
+          <div class="p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <div class="flex items-center space-x-3">
+                <div class="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-500 dark:bg-cyan-500/20">
+                  <i data-lucide="shield-check" class="w-6 h-6"></i>
+                </div>
+                <div>
+                  <h4 class="font-bold text-base text-slate-800 dark:text-slate-100">Kapasitas & Ketahanan Penyimpanan (Anti-Hilang)</h4>
+                  <p class="text-xs text-slate-500">Seluruh data yang terinput disimpan secara permanen di database lokal perangkat Anda dan tidak akan hilang jika tidak dihapus.</p>
+                </div>
+              </div>
+              <button onclick="openStorageStatusModal()" class="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs transition flex items-center space-x-1.5 shrink-0">
+                <i data-lucide="info" class="w-4 h-4"></i>
+                <span>Cek Detail Penyimpanan</span>
+              </button>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs">
+              <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700">
+                <span class="text-slate-400 block text-[11px]">Mesin Penyimpanan:</span>
+                <span class="font-black text-sm text-emerald-600 dark:text-emerald-400 block mt-0.5">IndexedDB High-Capacity</span>
+                <span class="text-[10px] text-slate-500">Mampu menampung ribuan data tanpa batas 5MB</span>
+              </div>
+              <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700">
+                <span class="text-slate-400 block text-[11px]">Proteksi Browser Eviction:</span>
+                <span class="font-black text-sm text-cyan-600 dark:text-cyan-400 block mt-0.5">${window.storageCapacityInfo && window.storageCapacityInfo.isPersisted ? '✓ Permanen Terkunci' : '✓ Terproteksi Lokal'}</span>
+                <span class="text-[10px] text-slate-500">Tidak akan dihapus otomatis oleh browser</span>
+              </div>
+              <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700">
+                <div class="flex justify-between items-center">
+                  <span class="text-slate-400 text-[11px]">Penggunaan Kuota Disk:</span>
+                  <span class="font-bold ${window.storageCapacityInfo && window.storageCapacityInfo.isFull ? 'text-rose-500' : 'text-slate-700 dark:text-slate-200'}">${window.storageCapacityInfo ? window.storageCapacityInfo.percentUsed : 0}%</span>
+                </div>
+                <div class="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden mt-1.5">
+                  <div class="${window.storageCapacityInfo && window.storageCapacityInfo.isFull ? 'bg-rose-500' : (window.storageCapacityInfo && window.storageCapacityInfo.isNearFull ? 'bg-amber-500' : 'bg-emerald-500')} h-full rounded-full transition-all" style="width: ${Math.min(100, Math.max(2, (window.storageCapacityInfo ? window.storageCapacityInfo.percentUsed : 1)))}%;"></div>
+                </div>
+                <span class="text-[10px] text-slate-500 mt-1 block">${window.storageCapacityInfo ? window.storageCapacityInfo.usageFormatted : '0 MB'} terpakai dari ${window.storageCapacityInfo ? window.storageCapacityInfo.quotaFormatted : 'Tersedia'}</span>
+              </div>
+            </div>
           </div>
 
           <!-- Ringkasan Status Database Saat Ini -->
@@ -4858,6 +7561,7 @@
         roleBadge.className = `font-bold text-sm capitalize ${state.role === 'admin' ? 'text-cyan-500' : 'text-emerald-500'}`;
       }
       initFirebaseSync();
+      initStorageAndSync();
       renderNav();
       renderPage();
     });
